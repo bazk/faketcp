@@ -23,6 +23,7 @@ if __name__=="__main__":
     PORT = 50007
     s = faketcp.Socket()
     s.connect((HOST, PORT))
+    print 'connection estabilished'
     s.sendall('Hello, world')
     data = s.recv(1024)
     s.close()

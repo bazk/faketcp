@@ -17,59 +17,85 @@
 
 import socket
 import struct
+import random
 
 class Socket(object):
     def __init__(self):
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-    def connect(self, address):
-        self._socket.connect(address)
+        self.seq = 0
+        self.ack = 0
 
     def bind(self, address):
         self._socket.bind(address)
 
-    def listen(self, backlog):
-        data, addr = self._socket.recvfrom(BUFSIZ)
+    def connect(self, address):
+        self.seq = random.randint(0, 65535)
+
+        syn = Packet()
+        syn.seq = self.seq
+        self.seq += 1
+        syn.flags = Packet.FLAG_SYN
+        self._socket.sendto(syn.to_data(), address)
+
+        data, addr = self._socket.recvfrom(Packet.BUFSIZ)
         packet = Packet.from_data(data)
 
+        if ((packet.flags & Packet.FLAG_ACK) != 0) and ((packet.flags & Packet.FLAG_SYN) != 0):
+            self.ack = packet.seq + 1
+            ack = Packet()
+            ack.seq = self.seq
+            self.seq += 1
+            ack.ack = self.ack
+            ack.flags = Packet.FLAG_SYN | Packet.FLAG_ACK
+            self._socket.sendto(ack.to_data(), addr)
+
+    def listen(self):
+        while True:
+            data, addr = self._socket.recvfrom(Packet.BUFSIZ)
+            packet = Packet.from_data(data)
+
+            if (packet.flags & Packet.FLAG_SYN) != 0:
+                self.ack = packet.seq + 1
+                self.seq = random.randint(0, 65535)
+
+                syn_ack = Packet()
+                syn_ack.seq = self.seq
+                self.seq += 1
+                syn_ack.ack = self.ack
+                syn_ack.flags = Packet.FLAG_SYN | Packet.FLAG_ACK
+                self._socket.sendto(syn_ack.to_data(), addr)
+
+                break
+
     def accept(self):
-        conn = Connection(self._socket.accept())
-        return (conn, conn.addr)
+        data, addr = self._socket.recvfrom(Packet.BUFSIZ)
+        packet = Packet.from_data(data)
+
+        if (packet.flags & Packet.FLAG_ACK) != 0:
+            conn = Socket()
+            conn.ack = packet.seq + 1
+            conn.seq = self.seq
+            return (conn, addr)
 
     def recv(self, bufsize, **kwargs):
-        return self._socket.recv(bufsize, **kwargs)
+        pass
 
     def send(self, string, **kwargs):
-        return self._socket.send(string, **kwargs)
+        pass
 
     def sendall(self, string, **kwargs):
-        return self._socket.sendall(string, **kwargs)
+        pass
 
     def close(self):
-        self._socket.close()
-
-class Connection(object):
-    def __init__(self, conn_addr):
-        (self._conn, self._addr) = conn_addr
-
-    @property
-    def addr(self):
-        return self._addr
-
-    def recv(self, bufsize, **kwargs):
-        return self._conn.recv(bufsize, **kwargs)
-
-    def send(self, string, **kwargs):
-        return self._conn.send(string, **kwargs)
-
-    def sendall(self, string, **kwargs):
-        return self._conn.sendall(string, **kwargs)
-
-    def close(self):
-        self._conn.close()
-
+        pass
 
 class Packet(object):
+    FLAG_ACK = 0x1
+    FLAG_SYN = 0x2
+
+    BUFSIZ = 256
+
     def __init__(self):
         self.seq = 0
         self.ack = 0

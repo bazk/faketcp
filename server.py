@@ -25,7 +25,8 @@ if __name__=="__main__":
 
     s = faketcp.Socket()
     s.bind((HOST, PORT))
-    s.listen(5)
+    s.listen()
+    print 'conecting'
     conn, addr = s.accept()
     print 'Connected by', addr
     while 1:
