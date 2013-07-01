@@ -16,5 +16,14 @@
 # You should have received a copy of the GNU General Public License
 # along with faketcp. If not, see <http://www.gnu.org/licenses/>.
 
+import faketcp
+
 if __name__=="__main__":
-    pass
+    HOST = 'localhost'
+    PORT = 50007
+    s = faketcp.Socket()
+    s.connect((HOST, PORT))
+    s.sendall('Hello, world')
+    data = s.recv(1024)
+    s.close()
+    print 'Received', repr(data)
