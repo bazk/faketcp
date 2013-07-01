@@ -1,0 +1,135 @@
+<HTML>
+<HEAD>
+<TITLE>Trabalho Prático - Redes II</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=iso-8859-1">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2K.1beta">
+<META HTTP-EQUIV="Content-Style-Type" CONTENT="text/css">
+
+<LINK REL="STYLESHEET" HREF="lista1.css">
+
+<LINK REL="next" HREF="node1.html">
+</HEAD>
+
+<BODY >
+
+<P>
+<DIV ALIGN="CENTER">
+<B>Universidade Federal do Paraná 
+<BR>
+Departamento de Informática 
+<BR>
+Bacharelado em Ciência da Computação 
+<BR>
+Prof. Elias P. Duarte Jr.</B>
+</DIV>
+
+<P>
+<DIV ALIGN="CENTER"><FONT SIZE="3"><B>Trabalho Prático de Redes de
+Computadores II - Turma 2013/1</B></FONT></DIV>
+
+<P>
+<DIV ALIGN="CENTER"><FONT SIZE="3"><B>Uma Aplicação Confiável sobre UDP</em></B></FONT></DIV>
+
+<center>
+<h2></h2>
+
+<p>
+Entrega: Todos os trabalhos serão acessados na terça-feira dia 9 de
+julho de 2013; não serão aceitos trabalhos disponibilizados após esta
+data. Atenção, são 4 semanas de prazo, organize-se!
+
+</center>
+
+<p>
+O trabalho <EM>deve preferencialmente</EM> ser feito em dupla; o
+código, os testes e o relatório devem ser feitos por ambos os membros da
+dupla. Use esta oportunidade para melhorar sua habilidade de trabalhar
+em equipe.
+
+<p>
+Os alunos devem informar por e-mail a URL do trabalho, usando o subject
+"TP REDES II 2013-1" <!Nas próximas aulas todas as duplas devem
+informar ao professor os nomes dos alunos, bem como a URL do trabalho.>
+
+<h4>Descrição do Trabalho</h4>
+
+<p>
+O programador de aplicações para a Internet que opta pelo UDP como seu protoco de transporte
+tem um trabalho adicional, se compararmos com o TCP. O UDP, bem como o IP, é um protocolo não-
+confiável, não-orientado à conexão. Assim o UDP permite que todos os problemas eventualmente 
+surgidos na rede IP se estendam à camada de aplicação. O programador tem que, portanto, projetar
+sua aplicação para detectar se os dados (1) se perderam; (2) duplicaram; (3) chegaram fora de ordem, 
+e tomar as medidas necessárias para resolver estes problemas.
+
+<p>
+Neste Trabalho Prático você vai implementar uma aplicação cliente-servidor
+sobre UDP.  Cada datagrama UDP/IP carrega um número inteiro positivo que
+identifica a ordem sequencial do datagrama. O identificador do primeiro
+pacote é escolhido aleatoriamente. O último datagrama tem identificador -1. O
+cliente tem uma interface que permite que o usuário escolha se quer (1)
+perder dados; (2) duplicar dados; (3) embaralhar dados.  Se a opção é
+perder ou duplicar dados, deve ser adotada uma estratégia aleatória para
+escolher quais dados são perdidos ou duplicados. Se a opção é perder os
+dados, o servidor deve fazer um pedido explícito de retransmissão.
+
+<p>
+O servidor deve imprimir os dados que recebeu (com dados perdidos, duplicados, fora
+de ordem) bem como os dados corretos, com todos os problemas resolvidos.
+
+<p>
+A linguagem de programação permitida é de livre escolha dos
+alunos. Sugere-se Python.  Todos os detalhes, como configuração, mensagens
+e o que não estiver especificado aqui deve ser definido e documentado
+no relatório. Interface, organização, criatividade são valorizadas!
+Capriche!
+
+<P>
+<h3>ENTREGA DO TRABALHO<h3>
+<h3>Deve ser construída uma página Web, que contém em documentos HTML, os
+seguintes itens:</h3>
+
+<li> <bf>Relatório</bf> de como foi feito o trabalho e quais foram os
+resultados obtidos. Use desenhos, diagramas, figuras, todos os recursos
+que permitam ao professor compreender como a dupla estruturou o trabalho
+e quais resultados obteve. O objetivo é o professor entender como a dupla 
+fez o trabalho, como o trabalho funciona.
+
+<li> <bf>Código Fonte</bf> comentado. <font color=red>ATENÇÃO:</font> acrescente
+a todo programa a terminação ".txt" para que possa ser diretamente aberto em um 
+browser. Exemplos: cliente.py.txt ou servidor.c.txt ou dispatcher.py.txt
+
+<li> <bf>Logs</bf> de execução dos processos cliente/servidores, que demonstrem a
+execução correta destes processos. Os testes devem ser exaustivos até o ponto
+que demonstrem com clareza a funcionalidade correta do sistema.
+
+<h4>Observações:</h4>
+
+<li> Não serão aceitos trabalhos impressos, nem em meio ótico/magnético.
+
+<li> Alguns trabalhos serão 
+defendidos no laboratório, portanto
+certifique-se que seu trabalho funciona aqui.
+
+<li> Pode ser usada qualquer linguagem de programação. A diversidade é bem
+vinda! O professor recomenda que os alunos usem esta oportunidade para aprender
+a linguagem Python. 
+
+<br>
+<br>
+<HR>
+<CENTER>
+<P>
+<font face="futura" size=3 color=blue>
+<a HREF="http://www.inf.ufpr.br/~elias">Prof. Elias P. Duarte Jr.</a> 
+&nbsp
+&nbsp
+<a HREF="http://www.inf.ufpr.br/">Departamento de Informática</A>
+&nbsp
+&nbsp
+<a HREF="http://www.ufpr.br/">UFPR</A> 
+</font>
+</CENTER>
+<HR>
+</BODY>
+</HTML>
