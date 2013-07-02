@@ -26,12 +26,14 @@ if __name__=="__main__":
     s = faketcp.Socket()
     s.bind((HOST, PORT))
     s.listen()
-    print 'conecting'
-    conn, addr = s.accept()
-    print 'Connected by', addr
-    while 1:
+
+    while True:
+        print 'conecting'
+        conn, addr = s.accept()
+
+        print 'Connected by', addr
         data = conn.recv(1024)
         if not data: break
         print data
         conn.send(data)
-    conn.close()
+        conn.close()
