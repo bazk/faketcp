@@ -106,6 +106,9 @@ class Socket(object):
         data, addr = self._socket.recvfrom(Packet.BUFSIZ)
         return (Packet.from_data(data), addr)
 
+class ChecksumError(Exception):
+    pass
+
 class Packet(object):
     FLAG_ACK = 0x1
     FLAG_SYN = 0x2
@@ -133,7 +136,7 @@ class Packet(object):
         packet.payload = data[14:]
 
         if packet.calculate_checksum(data[0:14]) != 0:
-            raise Exception('checksum failed')
+            raise ChecksumError('packet header: 0x' + data[0:14].encode('hex'))
 
         return packet
 
