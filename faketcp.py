@@ -18,6 +18,7 @@
 import socket
 import struct
 import random
+import threading
 
 class Socket(object):
     WINSIZE = 8
@@ -27,9 +28,15 @@ class Socket(object):
 
         self.seq = random.randint(0, 65535)
         self.ack = 0
+        self.win = self.WINSIZE
+        self.remote_win = 0
 
         self.connected = False
         self.address = None
+
+        self.connections = []
+
+        self.cv = threading.Condition()
 
     def bind(self, address):
         if self.connected:
@@ -59,44 +66,61 @@ class Socket(object):
         if self.connected:
             raise Exception('already connected')
 
-        while True:
-            packet, addr = self.recv_packet()
+        packet, addr = self.recv_packet()
 
-            if (packet.flags & Packet.FLAG_SYN) != 0:
-                self.ack = packet.seq + 1
-                syn_ack = Packet(flags=(Packet.FLAG_SYN | Packet.FLAG_ACK))
-                self.send_packet(syn_ack, addr)
-                break
+        if (packet.flags & Packet.FLAG_SYN) != 0:
+            conn = Socket()
+            conn.bind(('', 0))
+            conn.address = addr
+            conn.ack = packet.seq + 1
+            syn_ack = Packet(flags=(Packet.FLAG_SYN | Packet.FLAG_ACK))
+            conn.send_packet(syn_ack, addr)
+
+            ack, ack_addr = conn.recv_packet()
+
+            if (ack.flags & Packet.FLAG_ACK) != 0:
+                conn.ack = packet.seq + 1
+                conn.connected = True
+                conn.address = ack_addr
+                self.connections.append(conn)
 
     def accept(self):
         if self.connected:
             raise Exception('already connected')
 
-        packet, addr = self.recv_packet()
+        if len(self.connections) == 0:
+            return None
 
-        if (packet.flags & Packet.FLAG_ACK) != 0:
-            conn = Socket()
-            conn.connected = True
-            conn.address = addr
-            conn.seq = self.seq
-            conn.ack = self.ack + 1
-            self.seq = random.randint(0, 65535)
-            self.ack = 0
-            return (conn, addr)
+        conn = self.connections.pop(0)
+        return (conn, conn.address)
 
     def recv(self, bufsize, **kwargs):
         if not self.connected:
             raise Exception('not connected')
 
+        (packet, addr) = self.recv_packet()
+        return packet.payload
+
     def send(self, string, **kwargs):
         if not self.connected:
             raise Exception('not connected')
+
+        self.cv.acquire()
+        while self.remote_win <= 0:
+            self.cv.wait()
+
+        self.remote_win -= 1
+        self.cv.release()
+
+        packet = Packet(payload=string)
+        self.send_packet(packet, self.address)
 
     def close(self):
         self.connected = False
         self._socket.close()
 
     def send_packet(self, packet, address):
+        packet.win = self.win
         packet.seq = self.seq
         self.seq += 1
         packet.ack = self.ack
@@ -104,7 +128,12 @@ class Socket(object):
 
     def recv_packet(self):
         data, addr = self._socket.recvfrom(Packet.BUFSIZ)
-        return (Packet.from_data(data), addr)
+        packet = Packet.from_data(data)
+        self.cv.acquire()
+        self.remote_win = packet.win
+        self.cv.notify()
+        self.cv.release()
+        return (packet, addr)
 
 class ChecksumError(Exception):
     pass
