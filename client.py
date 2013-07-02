@@ -24,7 +24,7 @@ if __name__=="__main__":
     s = faketcp.Socket()
     s.connect((HOST, PORT))
     print 'connection estabilished'
-    s.sendall('Hello, world')
+    s.send('Hello, world')
     data = s.recv(1024)
     s.close()
     print 'Received', repr(data)

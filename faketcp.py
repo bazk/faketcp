@@ -20,75 +20,91 @@ import struct
 import random
 
 class Socket(object):
+    WINSIZE = 8
+
     def __init__(self):
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-        self.seq = 0
+        self.seq = random.randint(0, 65535)
         self.ack = 0
 
+        self.connected = False
+        self.address = None
+
     def bind(self, address):
+        if self.connected:
+            raise Exception('already connected')
+
         self._socket.bind(address)
 
     def connect(self, address):
-        self.seq = random.randint(0, 65535)
+        if self.connected:
+            raise Exception('already connected')
 
-        syn = Packet()
-        syn.seq = self.seq
-        self.seq += 1
-        syn.flags = Packet.FLAG_SYN
-        self._socket.sendto(syn.to_data(), address)
+        syn = Packet(flags=Packet.FLAG_SYN)
+        self.send_packet(syn, address)
 
-        data, addr = self._socket.recvfrom(Packet.BUFSIZ)
-        packet = Packet.from_data(data)
+        response, response_addr = self.recv_packet()
 
-        if ((packet.flags & Packet.FLAG_ACK) != 0) and ((packet.flags & Packet.FLAG_SYN) != 0):
-            self.ack = packet.seq + 1
-            ack = Packet()
-            ack.seq = self.seq
-            self.seq += 1
-            ack.ack = self.ack
-            ack.flags = Packet.FLAG_SYN | Packet.FLAG_ACK
-            self._socket.sendto(ack.to_data(), addr)
+        if ((response.flags & Packet.FLAG_ACK) != 0) and ((response.flags & Packet.FLAG_SYN) != 0):
+            self.ack = response.seq + 1
+
+            ack = Packet(flags=(Packet.FLAG_ACK))
+            self.send_packet(ack, response_addr)
+
+            self.connected = True
+            self.address = response_addr
 
     def listen(self):
+        if self.connected:
+            raise Exception('already connected')
+
         while True:
-            data, addr = self._socket.recvfrom(Packet.BUFSIZ)
-            packet = Packet.from_data(data)
+            packet, addr = self.recv_packet()
 
             if (packet.flags & Packet.FLAG_SYN) != 0:
                 self.ack = packet.seq + 1
-                self.seq = random.randint(0, 65535)
-
-                syn_ack = Packet()
-                syn_ack.seq = self.seq
-                self.seq += 1
-                syn_ack.ack = self.ack
-                syn_ack.flags = Packet.FLAG_SYN | Packet.FLAG_ACK
-                self._socket.sendto(syn_ack.to_data(), addr)
-
+                syn_ack = Packet(flags=(Packet.FLAG_SYN | Packet.FLAG_ACK))
+                self.send_packet(syn_ack, addr)
                 break
 
     def accept(self):
-        data, addr = self._socket.recvfrom(Packet.BUFSIZ)
-        packet = Packet.from_data(data)
+        if self.connected:
+            raise Exception('already connected')
+
+        packet, addr = self.recv_packet()
 
         if (packet.flags & Packet.FLAG_ACK) != 0:
             conn = Socket()
-            conn.ack = packet.seq + 1
+            conn.connected = True
+            conn.address = addr
             conn.seq = self.seq
+            conn.ack = self.ack + 1
+            self.seq = random.randint(0, 65535)
+            self.ack = 0
             return (conn, addr)
 
     def recv(self, bufsize, **kwargs):
-        pass
+        if not self.connected:
+            raise Exception('not connected')
 
     def send(self, string, **kwargs):
-        pass
-
-    def sendall(self, string, **kwargs):
-        pass
+        if not self.connected:
+            raise Exception('not connected')
 
     def close(self):
-        pass
+        self.connected = False
+        self._socket.close()
+
+    def send_packet(self, packet, address):
+        packet.seq = self.seq
+        self.seq += 1
+        packet.ack = self.ack
+        self._socket.sendto(packet.to_data(), address)
+
+    def recv_packet(self):
+        data, addr = self._socket.recvfrom(Packet.BUFSIZ)
+        return (Packet.from_data(data), addr)
 
 class Packet(object):
     FLAG_ACK = 0x1
@@ -96,13 +112,13 @@ class Packet(object):
 
     BUFSIZ = 256
 
-    def __init__(self):
-        self.seq = 0
-        self.ack = 0
-        self.flags = 0
-        self.win = 0
+    def __init__(self, seq=0, ack=0, flags=0, win=0, payload=''):
+        self.seq = seq
+        self.ack = ack
+        self.flags = flags
+        self.win = win
         self.checksum = 0
-        self.payload = ''
+        self.payload = payload
 
     def __str__(self):
         return str((self.seq, self.ack, self.flags, \

@@ -33,5 +33,5 @@ if __name__=="__main__":
         data = conn.recv(1024)
         if not data: break
         print data
-        conn.sendall(data)
+        conn.send(data)
     conn.close()
