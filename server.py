@@ -28,12 +28,19 @@ if __name__=="__main__":
     s.listen()
 
     while True:
-        print 'conecting'
+        print 'waiting new connection...'
         conn, addr = s.accept()
+        print 'connected by', addr
 
-        print 'Connected by', addr
+        print 'waiting data...'
         data = conn.recv(1024)
-        if not data: break
         print data
-        conn.send(data)
+
+        if data:
+            print 'sending data back'
+            conn.send(data)
+            print 'data sent'
+
+        print 'closing connection'
         conn.close()
+        print 'connection closed'

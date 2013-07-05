@@ -21,10 +21,21 @@ import faketcp
 if __name__=="__main__":
     HOST = 'localhost'
     PORT = 50007
+
     s = faketcp.Socket()
+
+    print 'connection to ', (HOST, PORT)
     s.connect((HOST, PORT))
     print 'connection estabilished'
+
+    print 'sending data...'
     s.send('Hello, world')
+    print 'data sent'
+
+    print 'waiting for response'
     data = s.recv(1024)
+    print 'got response: ', data
+
+    print 'closing connection'
     s.close()
-    print 'Received', repr(data)
+    print 'connection closed'

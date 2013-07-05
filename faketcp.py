@@ -21,181 +21,254 @@ import random
 import threading
 
 class State:
-    NONE = 0
-    SYN_SENT = 1
-    SYN_RECV = 2
-    ESTABLISHED = 3
+    CLOSED = 0
+    LISTEN = 1
+    SYN_SENT = 2
+    SYN_RECV = 3
+    ESTABLISHED = 4
+
+class Flags:
+    FLAG_ACK = 0x1
+    FLAG_SYN = 0x2
+
+class ChecksumError(Exception):
+    pass
 
 class Socket(object):
-    WINSIZE = 8
+    BUFSIZ = 8
 
     def __init__(self):
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-        self.seq = random.randint(0, 65535)
-        self.ack = 0
-        self.win = self.WINSIZE
+        self.STATE = State.CLOSED
 
-        self.state = State.NONE
-        self.remote_addr = None
-        self.remote_win = 0
+        self.SND_BUFFER = bytearray(65535)
+        self.RCV_BUFFER = bytearray(65535)
 
-        self.conn_queue = []
+        self.SND_NXT = 0 # send next
+        self.SND_UNA = 0
+        self.SND_RDY = 0
+        self.SND_WND = self.BUFSIZ # send window
+        self.ISS = random.randint(0, 65535) # initial send sequence number
 
-        self.cv = threading.Condition()
+        self.RCV_NXT = 0 # receive next
+        self.RCV_UNA = 0
+        self.RCV_WND = 0 # receive window
+        self.IRS = 0     # initial receive sequence number
+
+        self.OUT_OF_ORDER_BUFFER = []
+
+    def __str__(self):
+        if self.STATE == 0: state = 'CLOSED'
+        elif self.STATE == 1: state = 'LISTEN'
+        elif self.STATE == 2: state = 'SYN_SENT'
+        elif self.STATE == 3: state = 'SYN_RECV'
+        elif self.STATE == 4: state = 'ESTABLISHED'
+        else: state = 'UNKNOWN'
+
+        return 'Socket (STATE=%s, SND_NXT=%d, SND_UNA=%d, SND_RDY=%d, SND_WND=%d, ISS=%d,\
+ RCV_NXT=%d, RCV_UNA=%d, RCV_WND=%d, IRS=%d)' % (state, self.SND_NXT, \
+             self.SND_UNA, self.SND_RDY, self.SND_WND, self.ISS, self.RCV_NXT, \
+             self.RCV_UNA, self.RCV_WND, self.IRS)
 
     def bind(self, address):
-        if self.state == State.ESTABLISHED:
+        if self.STATE == State.ESTABLISHED:
             raise Exception('already connected')
 
         self._socket.bind(address)
 
     def connect(self, address):
-        if self.state == State.ESTABLISHED:
+        if self.STATE == State.ESTABLISHED:
             raise Exception('already connected')
 
-        syn = Packet(flags=Packet.FLAG_SYN)
-        self.send_packet(syn, address)
+        syn = Segment()
+        syn.FLAGS = Flags.FLAG_SYN
+        syn.WIN = self.SND_WND
+        syn.SEQ = self.ISS + self.SND_NXT
+        self._socket.sendto(syn.to_data(), address)
+        self.SND_RDY += 1
+        self.SND_NXT += 1
         print 'connect: sent SYN'
 
-        self.state = State.SYN_SENT
+        self.STATE = State.SYN_SENT
 
         while True:
-            response, response_addr = self.recv_packet()
+            data, addr = self._socket.recvfrom(4096)
+            segment = Segment.from_data(data)
 
-            if ((response.flags & Packet.FLAG_ACK) != 0) and ((response.flags & Packet.FLAG_SYN) != 0):
+            if ((segment.FLAGS & Flags.FLAG_ACK) != 0) and ((segment.FLAGS & Flags.FLAG_SYN) != 0):
                 break
 
         print 'connect: received SYN ACK'
-        self.ack = response.seq + 1
+        self.SND_UNA = segment.ACK - self.ISS
 
-        ack = Packet(flags=(Packet.FLAG_ACK))
-        self.send_packet(ack, response_addr)
+        self.REMOTE_ADDR = addr
+        self.IRS = segment.SEQ
+        self.RCV_NXT += 1
+        self.RCV_UNA += 1
+
+        ack = Segment()
+        ack.FLAGS = Flags.FLAG_ACK
+        ack.WIN = self.SND_WND
+        ack.SEQ = self.ISS + self.SND_NXT
+        ack.ACK = self.IRS + self.RCV_UNA
+        self._socket.sendto(ack.to_data(), self.REMOTE_ADDR)
         print 'connect: sent ACK'
 
-        self.state = State.ESTABLISHED
-        self.remote_addr = response_addr
+        self.STATE = State.ESTABLISHED
 
     def listen(self):
-        pass
+        self.STATE = State.LISTEN
 
     def accept(self):
-        if self.state == State.ESTABLISHED:
+        if self.STATE == State.ESTABLISHED:
             raise Exception('already connected')
 
         # loop until receive a SYN
         while True:
-            packet, addr = self.recv_packet()
+            data, addr = self._socket.recvfrom(1024)
+            segment = Segment.from_data(data)
 
-            if (packet.flags & Packet.FLAG_SYN) != 0:
+            if (segment.FLAGS & Flags.FLAG_SYN) != 0:
                 break
+            else:
+                print 'Unknown segment...'
 
-        print 'listen: received SYN'
-        # create a new socket to handle connection
+        print 'accept: received SYN'
+
         conn = Socket()
-        conn.bind(('', 0)) # bind to random port
-        conn.remote_addr = addr
-        conn.ack = packet.seq + 1
-        conn.state = State.SYN_RECV
+        conn.bind(('', 0))
+        conn.REMOTE_ADDR = addr
+        conn.IRS = segment.SEQ
+        conn.RCV_NXT += 1
+        conn.RCV_UNA += 1
+        conn.STATE = State.SYN_RECV
 
-        # send syn, ack packet
-        syn_ack = Packet(flags=(Packet.FLAG_SYN | Packet.FLAG_ACK))
-        conn.send_packet(syn_ack, addr)
-        print 'listen: sent SYN ACK'
+        # send syn, ack segment
+        syn_ack = Segment()
+        syn_ack.FLAGS = Flags.FLAG_SYN | Flags.FLAG_ACK
+        syn_ack.WIN = conn.SND_WND
+        syn_ack.SEQ = conn.ISS + conn.SND_NXT
+        syn_ack.ACK = conn.IRS + conn.RCV_UNA
+        conn._socket.sendto(syn_ack.to_data(), conn.REMOTE_ADDR)
+        conn.SND_RDY += 1
+        conn.SND_NXT += 1
+        print 'connect: sent SYN ACK through a new socket'
 
         # wait for an ACK
         while True:
-            ack, ack_addr = conn.recv_packet()
+            data, addr = conn._socket.recvfrom(1024)
+            segment = Segment.from_data(data)
 
-            if (ack.flags & Packet.FLAG_ACK) != 0:
+            if (segment.FLAGS & Flags.FLAG_ACK) != 0:
                 break
 
         print 'listen: received ACK'
-        conn.ack = ack.seq + 1
-        conn.remote_addr = ack_addr
-        conn.state = State.ESTABLISHED
+        conn.SND_UNA = segment.ACK - conn.ISS
+        conn.STATE = State.ESTABLISHED
 
-        return (conn, ack_addr)
+        return (conn, conn.REMOTE_ADDR)
 
     def recv(self, bufsize, **kwargs):
-        if not self.state == State.ESTABLISHED:
+        if not self.STATE == State.ESTABLISHED:
             raise Exception('not connected')
 
-        (packet, addr) = self.recv_packet()
-        return packet.payload
+        if self.RCV_UNA == self.RCV_NXT: # buffer empty
+            self.recv_segment()
+
+        data = self.RCV_BUFFER[self.RCV_UNA:self.RCV_NXT]
+        self.RCV_UNA = self.RCV_NXT
+        return data
 
     def send(self, string, **kwargs):
-        if not self.state == State.ESTABLISHED:
+        if not self.STATE == State.ESTABLISHED:
             raise Exception('not connected')
 
-        self.cv.acquire()
-        while self.remote_win <= 0:
-            self.cv.wait()
+        self.SND_RDY += len(string)
+        self.SND_BUFFER[self.SND_NXT:self.SND_RDY] = string
 
-        self.remote_win -= 1
-        self.cv.release()
-
-        packet = Packet(payload=string)
-        self.send_packet(packet, self.remote_addr)
+        # TODO: if (self.SND_RDY - self.SND_NXT > 1500) or TIMEOUT:
+        self.send_segment()
 
     def close(self):
-        self.state = State.NONE
+        self.STATE = State.CLOSED
         self._socket.close()
 
-    def send_packet(self, packet, addr):
-        packet.win = self.win
-        packet.seq = self.seq
-        self.seq += 1
-        packet.ack = self.ack
-        self._socket.sendto(packet.to_data(), addr)
+    def send_segment(self):
+        # copy 'LEN' bytes of data from buffer and move buffer pointer
+        segment = Segment()
+        segment.PAYLOAD = self.SND_BUFFER[self.SND_NXT:self.SND_RDY]
+        segment.SEQ = self.ISS + self.SND_NXT
+        segment.ACK = self.IRS + self.RCV_UNA
 
-    def recv_packet(self):
-        data, addr = self._socket.recvfrom(Packet.BUFSIZ)
-        packet = Packet.from_data(data)
-        self.cv.acquire()
-        self.remote_win = packet.win
-        self.cv.notify()
-        self.cv.release()
-        return (packet, addr)
+        self.SND_NXT = self.SND_RDY
 
-class ChecksumError(Exception):
-    pass
+        self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
 
-class Packet(object):
-    FLAG_ACK = 0x1
-    FLAG_SYN = 0x2
+    def recv_segment(self):
+        while True:
+            found = False
+            tmp = collections.deque()
+            while len(self.OUT_OF_ORDER_BUFFER) > 0:
+                segment = self.OUT_OF_ORDER_BUFFER.popleft()
 
-    BUFSIZ = 256
+                if (segment.SEQ - self.IRS) == self.RCV_NXT:
+                    found = True
+                    break
 
-    def __init__(self, seq=0, ack=0, flags=0, win=0, payload=''):
-        self.seq = seq
-        self.ack = ack
-        self.flags = flags
-        self.win = win
-        self.checksum = 0
-        self.payload = payload
+                elif (segment.SEQ - self.IRS) > self.RCV_NXT:
+                    tmp.append(segment)
+
+            self.OUT_OF_ORDER_BUFFER.extendleft(tmp)
+
+            if not found:
+                data, addr = self._socket.recvfrom(4096)
+                segment = Segment.from_data(data)
+
+            if (segment.SEQ - self.IRS) == self.RCV_NXT:
+                LEN = len(segment.PAYLOAD)
+                self.RCV_BUFFER[self.RCV_NXT:self.RCV_NXT+LEN] = segment.PAYLOAD
+                self.RCV_NXT += LEN
+                self.SND_UNA = segment.ACK - self.ISS
+                if LEN > 0:
+                    break
+            elif (segment.SEQ - self.IRS) < self.RCV_NXT
+                print 'WARNING: DUPLICATED SEGMENT (SEG.SEQ=%d, RCV_NXT=%d)' % (segment.SEQ, self.RCV_NXT + self.IRS)
+            else:
+                print 'WARNING: SEGMENT OUT OF ORDER (SEG.SEQ=%d, RCV_NXT=%d)' % (segment.SEQ, self.RCV_NXT + self.IRS)
+                self.OUT_OF_ORDER_BUFFER.append(segment)
+
+
+class Segment(object):
+    def __init__(self):
+        self.SEQ = 0
+        self.ACK = 0
+        self.FLAGS = 0x0000
+        self.WIN = 0
+        self.CHECKSUM = 0
+        self.PAYLOAD = ''
 
     def __str__(self):
-        return str((self.seq, self.ack, self.flags, \
-            self.win, self.checksum, self.payload))
+        return str((self.SEQ, self.ACK, self.FLAGS, \
+            self.WIN, self.CHECKSUM, self.PAYLOAD))
 
     @staticmethod
     def from_data(data):
-        packet = Packet()
+        segment = Segment()
 
-        packet.seq, packet.ack, packet.flags, packet.win, \
-                packet.checksum = struct.unpack('!IIHHH', data[0:14])
-        packet.payload = data[14:]
+        segment.SEQ, segment.ACK, segment.FLAGS, segment.WIN, \
+                segment.CHECKSUM = struct.unpack('!IIHHH', data[0:14])
+        segment.PAYLOAD = data[14:]
 
-        if packet.calculate_checksum(data[0:14]) != 0:
-            raise ChecksumError('packet header: 0x' + data[0:14].encode('hex'))
+        if segment.calculate_checksum(data[0:14]) != 0:
+            raise ChecksumError('segment header: 0x' + data[0:14].encode('hex'))
 
-        return packet
+        return segment
 
     def to_data(self):
-        header = struct.pack('!IIHH', self.seq, self.ack, self.flags, self.win)
-        checksum = struct.pack('!H', self.calculate_checksum(header))
-        return header + checksum + self.payload
+        header = struct.pack('!IIHH', self.SEQ, self.ACK, self.FLAGS, self.WIN)
+        self.CHECKSUM = struct.pack('!H', self.calculate_checksum(header))
+        return header + self.CHECKSUM + self.PAYLOAD
 
     def calculate_checksum(self, data):
         def carry_around_add(a, b):

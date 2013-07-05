@@ -53,3 +53,19 @@ class TestPacket(unittest.TestCase):
         # receive
         with self.assertRaises(faketcp.ChecksumError):
             p = faketcp.Packet.from_data(data)
+
+
+class TestBuffer(unittest.TestCase):
+    def setUp(self):
+        self.buffer = faketcp.Buffer()
+
+    def test_remaining_size(self):
+        self.assertEqual(self.buffer.remaining, self.buffer.BUFSIZ, 'wrong initial remaining size')
+        self.buffer.push('test words')
+        self.assertEqual(self.buffer.remaining, self.buffer.BUFSIZ - 10, 'wrong buffer remaining size')
+        self.assertEqual(self.buffer.pop(5), 'test ', 'pop failed')
+        self.assertEqual(self.buffer.remaining, self.buffer.BUFSIZ - 5, 'wrong buffer remaining size (%d)' % self.buffer.remaining)
+        self.buffer.push('house')
+        self.assertEqual(self.buffer.remaining, self.buffer.BUFSIZ - 10, 'wrong buffer remaining size (%d)' % self.buffer.remaining)
+        res = self.buffer.pop(10)
+        self.assertEqual(res, 'wordshouse', 'pop failed (%s)' % res)
