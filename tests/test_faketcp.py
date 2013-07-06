@@ -20,52 +20,36 @@ import faketcp
 import struct
 
 
-class TestPacket(unittest.TestCase):
+class TestSegment(unittest.TestCase):
     def setUp(self):
-        # forge a packet
-        self.packet = faketcp.Packet()
-        self.packet.seq = 0x01c0f1cc
-        self.packet.ack = 0x00000ca1
-        self.packet.flags = 0x0020
-        self.packet.win = 0x0081
-        self.packet.payload = 'The quick brown fox jumps over the lazy dog'
+        # forge a segment
+        self.segment = faketcp.Segment()
+        self.segment.SEQ = 0x01c0f1cc
+        self.segment.ACK = 0x00000ca1
+        self.segment.FLAGS = 0x0020
+        self.segment.WIN = 0x0081
+        self.segment.PAYLOAD = 'The quick brown fox jumps over the lazy dog'
 
     def test_assemble_disassemble(self):
         # send
-        data = self.packet.to_data()
+        data = self.segment.to_data()
 
         # receive
-        p = faketcp.Packet.from_data(data)
-   
-        self.assertEqual(p.seq, self.packet.seq, 'incorrect seq value')
-        self.assertEqual(p.ack, self.packet.ack, 'incorrect ack value')
-        self.assertEqual(p.flags, self.packet.flags, 'incorrect flags value')
-        self.assertEqual(p.win, self.packet.win, 'incorrect win value')
-        self.assertEqual(p.payload, self.packet.payload, 'incorrect payload')
+        p = faketcp.Segment.from_data(data)
+
+        self.assertEqual(p.SEQ, self.segment.SEQ, 'incorrect seq value')
+        self.assertEqual(p.ACK, self.segment.ACK, 'incorrect ack value')
+        self.assertEqual(p.FLAGS, self.segment.FLAGS, 'incorrect flags value')
+        self.assertEqual(p.WIN, self.segment.WIN, 'incorrect win value')
+        self.assertEqual(p.PAYLOAD, self.segment.PAYLOAD, 'incorrect payload')
 
     def test_checksum_fail(self):
         # send
-        data = self.packet.to_data()
+        data = self.segment.to_data()
 
-        # modify packet forcing a checksum fail
+        # modify segment forcing a checksum fail
         data = data[:13] + struct.pack('!B', 0xff) + data[14:]
 
         # receive
         with self.assertRaises(faketcp.ChecksumError):
-            p = faketcp.Packet.from_data(data)
-
-
-class TestBuffer(unittest.TestCase):
-    def setUp(self):
-        self.buffer = faketcp.Buffer()
-
-    def test_remaining_size(self):
-        self.assertEqual(self.buffer.remaining, self.buffer.BUFSIZ, 'wrong initial remaining size')
-        self.buffer.push('test words')
-        self.assertEqual(self.buffer.remaining, self.buffer.BUFSIZ - 10, 'wrong buffer remaining size')
-        self.assertEqual(self.buffer.pop(5), 'test ', 'pop failed')
-        self.assertEqual(self.buffer.remaining, self.buffer.BUFSIZ - 5, 'wrong buffer remaining size (%d)' % self.buffer.remaining)
-        self.buffer.push('house')
-        self.assertEqual(self.buffer.remaining, self.buffer.BUFSIZ - 10, 'wrong buffer remaining size (%d)' % self.buffer.remaining)
-        res = self.buffer.pop(10)
-        self.assertEqual(res, 'wordshouse', 'pop failed (%s)' % res)
+            p = faketcp.Segment.from_data(data)

@@ -17,6 +17,7 @@
 
 import socket
 import struct
+import scheduler
 import random
 import threading
 
@@ -30,6 +31,7 @@ class State:
 class Flags:
     FLAG_ACK = 0x1
     FLAG_SYN = 0x2
+    FLAG_NACK = 0x4
 
 class ChecksumError(Exception):
     pass
@@ -55,8 +57,6 @@ class Socket(object):
         self.RCV_UNA = 0
         self.RCV_WND = 0 # receive window
         self.IRS = 0     # initial receive sequence number
-
-        self.OUT_OF_ORDER_BUFFER = []
 
     def __str__(self):
         if self.STATE == 0: state = 'CLOSED'
@@ -200,6 +200,7 @@ class Socket(object):
         segment.PAYLOAD = self.SND_BUFFER[self.SND_NXT:self.SND_RDY]
         segment.SEQ = self.ISS + self.SND_NXT
         segment.ACK = self.IRS + self.RCV_UNA
+        segment.FLAGS = Flags.ACK
 
         self.SND_NXT = self.SND_RDY
 
@@ -207,36 +208,43 @@ class Socket(object):
 
     def recv_segment(self):
         while True:
-            found = False
-            tmp = collections.deque()
-            while len(self.OUT_OF_ORDER_BUFFER) > 0:
-                segment = self.OUT_OF_ORDER_BUFFER.popleft()
+            data, addr = self._socket.recvfrom(4096)
+            segment = Segment.from_data(data)
 
-                if (segment.SEQ - self.IRS) == self.RCV_NXT:
-                    found = True
-                    break
+            if (segment.flags & Flags.SYN) != 0:
+                print 'WARNING: RECEIVED A SYN AT MIDDLE OF CONNECTION'
+                continue
 
-                elif (segment.SEQ - self.IRS) > self.RCV_NXT:
-                    tmp.append(segment)
-
-            self.OUT_OF_ORDER_BUFFER.extendleft(tmp)
-
-            if not found:
-                data, addr = self._socket.recvfrom(4096)
-                segment = Segment.from_data(data)
+            if (segment.flags & Flags.NACK) != 0:
+                print 'WARNING: RECEIVED NACK, RESENDING (SEG.SEQ=%d, SEQ.ACK=%d, SND.NXT=%d, SND.UNA=%d)' % (segment.SEQ, segment.ACK, self.SND_NXT, self.SND_UNA)
+                self.SND_NXT = self.SND_UNA
+                self.send_segment()
 
             if (segment.SEQ - self.IRS) == self.RCV_NXT:
                 LEN = len(segment.PAYLOAD)
                 self.RCV_BUFFER[self.RCV_NXT:self.RCV_NXT+LEN] = segment.PAYLOAD
                 self.RCV_NXT += LEN
-                self.SND_UNA = segment.ACK - self.ISS
+
+                if (self.flags & Flags.ACK) != 0:
+                    self.SND_UNA = segment.ACK - self.ISS
+
                 if LEN > 0:
-                    break
-            elif (segment.SEQ - self.IRS) < self.RCV_NXT
-                print 'WARNING: DUPLICATED SEGMENT (SEG.SEQ=%d, RCV_NXT=%d)' % (segment.SEQ, self.RCV_NXT + self.IRS)
+                    # now there is data on the buffer
+                    return
+
+            elif (segment.SEQ - self.IRS) < self.RCV_NXT:
+                print 'WARNING: DUPLICATED SEGMENT, DISCARDING (SEG.SEQ=%d, RCV_NXT=%d)' % (segment.SEQ, self.RCV_NXT + self.IRS)
+
             else:
-                print 'WARNING: SEGMENT OUT OF ORDER (SEG.SEQ=%d, RCV_NXT=%d)' % (segment.SEQ, self.RCV_NXT + self.IRS)
-                self.OUT_OF_ORDER_BUFFER.append(segment)
+                print 'WARNING: SEGMENT OUT OF ORDER, SENDING NACK (SEG.SEQ=%d, RCV_NXT=%d)' % (segment.SEQ, self.RCV_NXT + self.IRS)
+                self.send_nack()
+
+    def send_nack(self):
+        segment = Segment()
+        segment.SEQ = self.ISS + self.SND_NXT
+        segment.ACK = self.IRS + self.RCV_UNA
+        segment.FLAGS = Flags.NACK
+        self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
 
 
 class Segment(object):
