@@ -39,7 +39,7 @@ class ChecksumError(Exception):
 class Socket(object):
     BUFSIZ = 8
 
-    def __init__(self):
+    def __init__(self, ploss=0.0, pdup=0.0, pdelay=0.0):
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         self.STATE = State.CLOSED
@@ -51,12 +51,21 @@ class Socket(object):
         self.SND_UNA = 0
         self.SND_RDY = 0
         self.SND_WND = self.BUFSIZ # send window
+        self.SND_TIMEOUT = 2.0
+        self.SND_TIMER = scheduler.Timer(self.SND_TIMEOUT, self.send_timeout)
         self.ISS = random.randint(0, 65535) # initial send sequence number
 
         self.RCV_NXT = 0 # receive next
         self.RCV_UNA = 0
         self.RCV_WND = 0 # receive window
         self.IRS = 0     # initial receive sequence number
+
+        self.PLOSS = ploss
+        self.PDUP = pdup
+        self.PDELAY = pdelay
+
+        self.DELAYED_SEND = None
+        self.RETRANS_QUEUE = []
 
     def __str__(self):
         if self.STATE == 0: state = 'CLOSED'
@@ -91,6 +100,7 @@ class Socket(object):
         print 'connect: sent SYN'
 
         self.STATE = State.SYN_SENT
+        self.SND_TIMER.start()
 
         while True:
             data, addr = self._socket.recvfrom(4096)
@@ -98,6 +108,8 @@ class Socket(object):
 
             if ((segment.FLAGS & Flags.FLAG_ACK) != 0) and ((segment.FLAGS & Flags.FLAG_SYN) != 0):
                 break
+
+        self.SND_TIMER.stop()
 
         print 'connect: received SYN ACK'
         self.SND_UNA = segment.ACK - self.ISS
@@ -142,7 +154,6 @@ class Socket(object):
         conn.IRS = segment.SEQ
         conn.RCV_NXT += 1
         conn.RCV_UNA += 1
-        conn.STATE = State.SYN_RECV
 
         # send syn, ack segment
         syn_ack = Segment()
@@ -155,6 +166,9 @@ class Socket(object):
         conn.SND_NXT += 1
         print 'connect: sent SYN ACK through a new socket'
 
+        conn.STATE = State.SYN_RECV
+        self.SND_TIMER.start()
+
         # wait for an ACK
         while True:
             data, addr = conn._socket.recvfrom(1024)
@@ -163,9 +177,12 @@ class Socket(object):
             if (segment.FLAGS & Flags.FLAG_ACK) != 0:
                 break
 
+        self.SND_TIMER.stop()
+
         print 'listen: received ACK'
         conn.SND_UNA = segment.ACK - conn.ISS
         conn.STATE = State.ESTABLISHED
+        self.SND_TIMER.start()
 
         return (conn, conn.REMOTE_ADDR)
 
@@ -187,7 +204,6 @@ class Socket(object):
         self.SND_RDY += len(string)
         self.SND_BUFFER[self.SND_NXT:self.SND_RDY] = string
 
-        # TODO: if (self.SND_RDY - self.SND_NXT > 1500) or TIMEOUT:
         self.send_segment()
 
     def close(self):
@@ -200,9 +216,25 @@ class Socket(object):
         segment.PAYLOAD = self.SND_BUFFER[self.SND_NXT:self.SND_RDY]
         segment.SEQ = self.ISS + self.SND_NXT
         segment.ACK = self.IRS + self.RCV_UNA
-        segment.FLAGS = Flags.ACK
+        segment.FLAGS = Flags.FLAG_ACK
 
         self.SND_NXT = self.SND_RDY
+
+        if self.DELAYED_SEND is not None:
+            self._socket.sendto(self.DELAYED_SEND.to_data(), self.REMOTE_ADDR)
+            self.DELAYED_SEND = None
+
+        self.RETRANS_QUEUE.append(segment)
+
+        if random.uniform(0,1) < self.PLOSS:
+            return
+
+        if random.uniform(0,1) < self.PDELAY:
+            self.DELAYED_SEND = segment
+            return
+
+        if random.uniform(0,1) < self.PDUP:
+            self.DELAYED_SEND = segment
 
         self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
 
@@ -211,22 +243,29 @@ class Socket(object):
             data, addr = self._socket.recvfrom(4096)
             segment = Segment.from_data(data)
 
-            if (segment.flags & Flags.SYN) != 0:
+            if (segment.FLAGS & Flags.FLAG_SYN) != 0:
                 print 'WARNING: RECEIVED A SYN AT MIDDLE OF CONNECTION'
                 continue
 
-            if (segment.flags & Flags.NACK) != 0:
+            if (segment.FLAGS & Flags.FLAG_NACK) != 0:
                 print 'WARNING: RECEIVED NACK, RESENDING (SEG.SEQ=%d, SEQ.ACK=%d, SND.NXT=%d, SND.UNA=%d)' % (segment.SEQ, segment.ACK, self.SND_NXT, self.SND_UNA)
                 self.SND_NXT = self.SND_UNA
-                self.send_segment()
+                resend = self.RETRANS_QUEUE[0]
+                self._socket.sendto(resend.to_data(), self.REMOTE_ADDR)
+                self.SND_TIMER.reset()
 
             if (segment.SEQ - self.IRS) == self.RCV_NXT:
                 LEN = len(segment.PAYLOAD)
                 self.RCV_BUFFER[self.RCV_NXT:self.RCV_NXT+LEN] = segment.PAYLOAD
                 self.RCV_NXT += LEN
 
-                if (self.flags & Flags.ACK) != 0:
+                if (segment.FLAGS & Flags.FLAG_ACK) != 0:
                     self.SND_UNA = segment.ACK - self.ISS
+                    self.SND_TIMER.reset()
+
+                    if len(self.RETRANS_QUEUE) > 0:
+                        while self.RETRANS_QUEUE[0].SEQ <= segment.ACK:
+                            del self.RETRANS_QUEUE[0]
 
                 if LEN > 0:
                     # now there is data on the buffer
@@ -237,15 +276,28 @@ class Socket(object):
 
             else:
                 print 'WARNING: SEGMENT OUT OF ORDER, SENDING NACK (SEG.SEQ=%d, RCV_NXT=%d)' % (segment.SEQ, self.RCV_NXT + self.IRS)
-                self.send_nack()
+                #self.send_nack()
 
     def send_nack(self):
         segment = Segment()
         segment.SEQ = self.ISS + self.SND_NXT
         segment.ACK = self.IRS + self.RCV_UNA
-        segment.FLAGS = Flags.NACK
+        segment.FLAGS = Flags.FLAG_NACK
         self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
 
+    def send_timeout(self):
+        if self.STATE == State.SYN_SENT:
+            # resend SYN
+            pass
+        elif self.STATE == State.SYN_RECV:
+            # resend ACK
+            pass
+        elif self.STATE == State.ESTABLISHED:
+            if len(self.RETRANS_QUEUE) > 0:
+                resend = self.RETRANS_QUEUE[0]
+                self._socket.sendto(resend.to_data(), self.REMOTE_ADDR)
+
+        self.SND_TIMER.reset()
 
 class Segment(object):
     def __init__(self):

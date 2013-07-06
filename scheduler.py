@@ -26,6 +26,29 @@ class Timer:
         self.args = args
         self.kwargs = kwargs
 
+        self.scheduler = Scheduler()
+
+        self.running = False
+
+    def start(self):
+        if self.running:
+            return
+
+        self.scheduler.add_timer(self)
+
+    def stop(self):
+        if not self.running:
+            return
+
+        self.scheduler.remove_timer(self)
+
+    def reset(self):
+        if not self.running:
+            return
+
+        self.scheduler.remove_timer(self)
+        self.scheduler.add_timer(self)
+
     def timeout_handler(self):
         self.callback(*self.args, **self.kwargs)
 
@@ -45,6 +68,13 @@ class Scheduler:
 
     def add_timer(self, timer):
         heapq.heappush(self.timers, (timer.timeout, timer))
+        self.update_alarm()
+
+    def remove_timer(self, timer):
+        for i in range(self.timers):
+            if self.timers[i] == timer:
+                del self.timers[i]
+
         self.update_alarm()
 
     def update_alarm(self):

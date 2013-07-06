@@ -28,19 +28,28 @@ if __name__=="__main__":
     s.listen()
 
     while True:
-        print 'waiting new connection...'
+        print 'Listening for new connection on port ', PORT, '...'
         conn, addr = s.accept()
-        print 'connected by', addr
 
-        print 'waiting data...'
+        print 'Connection estabilished (', addr, ').'
+
+        print 'Waiting for packet number 1...'
         data = conn.recv(1024)
-        print data
+        print 'Received packet number 1: ', data
 
-        if data:
-            print 'sending data back'
-            conn.send(data)
-            print 'data sent'
+        print 'Waiting for packet number 2...'
+        data = conn.recv(1024)
+        print 'Received packet number 2: ', data
 
-        print 'closing connection'
+        print 'Waiting for packet number 3...'
+        data = conn.recv(1024)
+        print 'Received packet number 3: ', data
+
+        print 'Sending response packet number 1...'
+        conn.send('this is the response packet number 1')
+
+        print 'Waiting for packet number 4...'
+        data = conn.recv(1024)
+        print 'Received packet number 4: ', data
+
         conn.close()
-        print 'connection closed'
