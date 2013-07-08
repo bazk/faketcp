@@ -37,6 +37,10 @@ def test_simple(socket):
     print 'Sending packet number 4...'
     socket.send('this is the packet number 4')
 
+def test_send(socket):
+    for i in range(50):
+        socket.send('this is the packet number %d' % i)
+
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description='FakeTCP client')
 

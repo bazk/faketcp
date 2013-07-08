@@ -15,8 +15,8 @@
 # You should have received a copy of the GNU General Public License
 # along with faketcp. If not, see <http://www.gnu.org/licenses/>.
 
+import threading
 import heapq
-import signal
 import time
 
 class Timer:
@@ -51,7 +51,7 @@ class Timer:
     def timeout_handler(self):
         self.callback(*self.args, **self.kwargs)
 
-class Scheduler:
+class Scheduler():
     _instance = None
 
     def __new__(cls, *args, **kwargs):
@@ -61,24 +61,67 @@ class Scheduler:
         return cls._instance
 
     def __init__(self):
-        signal.signal(signal.SIGALRM, self.alarm_handler)
         self.timers = []
         self.last_update = None
+        self.wait_timeout = 0
+
+        self.thread = threading.Thread(target=self.run)
+        self.lock = threading.Lock()
+        self.cv = threading.Condition(lock)
+        self.exit = False
+
+        self.thread.start()
+
+    def stop(self):
+        self.cv.acquire()
+        try:
+            print 'exit = False'
+            self.exit = True
+            print 'exit = True'
+            self.cv.notify()
+        finally:
+            self.cv.release()
+
+        self.thread.join()
+
+    def run(self):
+        self.cv.acquire()
+
+        while not self.exit:
+            print 'exit must be True'
+
+            if self.wait_timeout == 0:
+                self.cv.wait()
+            else:
+                self.cv.wait(timeout=self.wait_timeout)
+
+            self.update_timers()
+
+        self.cv.release()
 
     def add_timer(self, timer):
-        self.update_alarm()
-        heapq.heappush(self.timers, (timer.timeout, timer))
-        self.update_alarm()
+        self.cv.acquire()
+        try:
+            self.cv.notify()
+            heapq.heappush(self.timers, (timer.timeout, timer))
+            self.cv.notify()
+        finally:
+            self.cv.release()
 
     def remove_timer(self, timer):
-        for i in range(len(self.timers)):
-            if self.timers[i] == timer:
-                del self.timers[i]
-                break
+        self.cv.acquire()
 
-        self.update_alarm()
+        try:
+            for i in range(len(self.timers)):
+                if self.timers[i] == timer:
+                    del self.timers[i]
+                    break
 
-    def update_alarm(self):
+            self.cv.notify()
+        finally:
+            self.cv.release()
+
+    def update_timers(self):
         if self.last_update is None:
             diff = 0
         else:
@@ -87,7 +130,7 @@ class Scheduler:
         self.last_update = time.time()
 
         if len(self.timers) == 0:
-            signal.alarm(0)
+            self.wait_timeout = 0
             return
 
         self.last_update = time.time()
@@ -100,26 +143,15 @@ class Scheduler:
             timeout -= diff
 
             if timeout <= 0:
-                print 'WARNING: overtime (%d)', timeout
                 timer.timeout_handler()
             else:
                 if smallest is None:
                     smallest = timeout
                 heapq.heappush(new_queue, (timeout, timer))
 
-
         self.timers = new_queue
 
-
         if smallest is None:
-            signal.alarm(0)
+            self.wait_timeout = 0
         else:
-            signal.setitimer(signal.ITIMER_REAL, smallest)
-
-    def alarm_handler(self, signum, frame):
-        if len(self.timers) == 0:
-            return
-
-        (timeout, timer) = heapq.heappop(self.timers)
-        timer.timeout_handler()
-        self.update_alarm()
+            self.wait_timeout = smallest

@@ -33,23 +33,29 @@ if __name__=="__main__":
 
         print 'Connection estabilished (', addr, ').'
 
-        print 'Waiting for packet number 1...'
-        data = conn.recv(1024)
-        print 'Received packet number 1: ', data
+        while True:
+            try:
+                conn.recv(1024)
+            except faketcp.NotConnected:
+                break
 
-        print 'Waiting for packet number 2...'
-        data = conn.recv(1024)
-        print 'Received packet number 2: ', data
+        # print 'Waiting for packet number 1...'
+        # data = conn.recv(1024)
+        # print 'Received packet number 1: ', data
 
-        print 'Waiting for packet number 3...'
-        data = conn.recv(1024)
-        print 'Received packet number 3: ', data
+        # print 'Waiting for packet number 2...'
+        # data = conn.recv(1024)
+        # print 'Received packet number 2: ', data
 
-        print 'Sending response packet number 1...'
-        conn.send('this is the response packet number 1')
+        # print 'Waiting for packet number 3...'
+        # data = conn.recv(1024)
+        # print 'Received packet number 3: ', data
 
-        print 'Waiting for packet number 4...'
-        data = conn.recv(1024)
-        print 'Received packet number 4: ', data
+        # print 'Sending response packet number 1...'
+        # conn.send('this is the response packet number 1')
 
-        conn.close()
+        # print 'Waiting for packet number 4...'
+        # data = conn.recv(1024)
+        # print 'Received packet number 4: ', data
+
+        #conn.close()

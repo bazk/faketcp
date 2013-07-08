@@ -17,10 +17,11 @@
 
 import socket
 import struct
-import scheduler
 import random
 import threading
 import errno
+import collections
+import atexit
 
 class State:
     CLOSED = 0
@@ -33,40 +34,50 @@ class Flags:
     FLAG_ACK = 0x1
     FLAG_SYN = 0x2
     FLAG_NACK = 0x4
+    FLAG_DATA = 0x8
 
 class ChecksumError(Exception):
     pass
 
+class NotConnected(Exception):
+    pass
+
 class Socket(object):
-    BUFSIZ = 8
+    BUFFER_SIZE = 16
 
     def __init__(self, ploss=0.0, pdup=0.0, pdelay=0.0):
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         self.STATE = State.CLOSED
 
-        self.SND_BUFFER = bytearray(65535)
-        self.RCV_BUFFER = bytearray(65535)
+        self.SND_BUFFER = collections.deque(maxlen=self.BUFFER_SIZE)
+        self.RCV_BUFFER = collections.deque(maxlen=self.BUFFER_SIZE)
 
-        self.SND_NXT = 0 # send next
+        self.SND_NXT = 0
         self.SND_UNA = 0
         self.SND_RDY = 0
-        self.SND_WND = self.BUFSIZ # send window
-        self.SND_TIMEOUT = 2.0
-        self.SND_TIMER = scheduler.Timer(self.SND_TIMEOUT, self.send_timeout)
+        self.SND_WND = 0
+        self.SND_TIMEOUT = 0.1
+        self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
         self.ISS = random.randint(0, 65535) # initial send sequence number
 
-        self.RCV_NXT = 0 # receive next
+        self.RCV_NXT = 0
         self.RCV_UNA = 0
-        self.RCV_WND = 0 # receive window
+        self.RCV_WND = self.BUFFER_SIZE
         self.IRS = 0     # initial receive sequence number
+
+        self.ACK_PENDING = False
+        self.NACK_PENDING = False
+        self.ACK_TIMEOUT = 0.02
+        self.ACK_TIMER = threading.Timer(self.ACK_TIMEOUT, self.ack_timeout)
 
         self.PLOSS = ploss
         self.PDUP = pdup
         self.PDELAY = pdelay
 
         self.DELAYED_SEND = None
-        self.RETRANS_QUEUE = []
+
+        self.lock = threading.Lock()
 
     def __str__(self):
         if self.STATE == 0: state = 'CLOSED'
@@ -76,9 +87,9 @@ class Socket(object):
         elif self.STATE == 4: state = 'ESTABLISHED'
         else: state = 'UNKNOWN'
 
-        return 'Socket (STATE=%s, SND_NXT=%d, SND_UNA=%d, SND_RDY=%d, SND_WND=%d, ISS=%d,\
+        return 'Socket (STATE=%s, SND_NXT=%d, SND_UNA=%d, SND_WND=%d, ISS=%d,\
  RCV_NXT=%d, RCV_UNA=%d, RCV_WND=%d, IRS=%d)' % (state, self.SND_NXT, \
-             self.SND_UNA, self.SND_RDY, self.SND_WND, self.ISS, self.RCV_NXT, \
+             self.SND_UNA, self.SND_WND, self.ISS, self.RCV_NXT, \
              self.RCV_UNA, self.RCV_WND, self.IRS)
 
     def bind(self, address):
@@ -93,13 +104,13 @@ class Socket(object):
 
         syn = Segment()
         syn.FLAGS = Flags.FLAG_SYN
-        syn.WIN = self.SND_WND
-        syn.SEQ = self.ISS + self.SND_NXT
+        syn.WIN = self.RCV_WND
+        syn.SEQ = self.ISS
         print 'SEND: ', str(syn)
         self._socket.sendto(syn.to_data(), address)
+
         self.SND_RDY += 1
         self.SND_NXT += 1
-        print 'connect: sent SYN'
 
         self.STATE = State.SYN_SENT
         self.SND_TIMER.start()
@@ -107,14 +118,17 @@ class Socket(object):
         while True:
             data, addr = self._recvfrom_wrapper(4096)
             segment = Segment.from_data(data)
+            print 'RECEIVE: ', str(segment)
 
             if ((segment.FLAGS & Flags.FLAG_ACK) != 0) and ((segment.FLAGS & Flags.FLAG_SYN) != 0):
                 break
 
-        self.SND_TIMER.stop()
+        self.SND_TIMER.cancel()
+        self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
+        self.SND_TIMER.start()
 
-        print 'connect: received SYN ACK'
         self.SND_UNA = segment.ACK - self.ISS
+        self.SND_WND = segment.WIN
 
         self.REMOTE_ADDR = addr
         self.IRS = segment.SEQ
@@ -123,14 +137,16 @@ class Socket(object):
 
         ack = Segment()
         ack.FLAGS = Flags.FLAG_ACK
-        ack.WIN = self.SND_WND
+        ack.WIN = self.RCV_WND
         ack.SEQ = self.ISS + self.SND_NXT
         ack.ACK = self.IRS + self.RCV_UNA
         print 'SEND: ', str(ack)
         self._socket.sendto(ack.to_data(), self.REMOTE_ADDR)
-        print 'connect: sent ACK'
 
+        self.ACK_TIMER.start()
         self.STATE = State.ESTABLISHED
+
+        self._socket.setblocking(False)
 
     def listen(self):
         self.STATE = State.LISTEN
@@ -143,174 +159,282 @@ class Socket(object):
         while True:
             data, addr = self._recvfrom_wrapper(1024)
             segment = Segment.from_data(data)
+            print 'RECEIVE: ', str(segment)
 
             if (segment.FLAGS & Flags.FLAG_SYN) != 0:
                 break
             else:
                 print 'Unknown segment...'
 
-        print 'accept: received SYN'
-
         conn = Socket()
         conn.bind(('', 0))
         conn.REMOTE_ADDR = addr
         conn.IRS = segment.SEQ
+        conn.SND_WND = segment.WIN
         conn.RCV_NXT += 1
         conn.RCV_UNA += 1
 
         # send syn, ack segment
         syn_ack = Segment()
         syn_ack.FLAGS = Flags.FLAG_SYN | Flags.FLAG_ACK
-        syn_ack.WIN = conn.SND_WND
-        syn_ack.SEQ = conn.ISS + conn.SND_NXT
+        syn_ack.WIN = conn.RCV_WND
+        syn_ack.SEQ = conn.ISS
         syn_ack.ACK = conn.IRS + conn.RCV_UNA
         print 'SEND: ', str(syn_ack)
         conn._socket.sendto(syn_ack.to_data(), conn.REMOTE_ADDR)
+
         conn.SND_RDY += 1
         conn.SND_NXT += 1
-        print 'connect: sent SYN ACK through a new socket'
 
         conn.STATE = State.SYN_RECV
-        self.SND_TIMER.start()
+        conn.SND_TIMER.start()
 
         # wait for an ACK
         while True:
             data, addr = conn._recvfrom_wrapper(1024)
             segment = Segment.from_data(data)
+            print 'RECEIVE: ', str(segment)
 
             if (segment.FLAGS & Flags.FLAG_ACK) != 0:
                 break
 
-        self.SND_TIMER.stop()
-
-        print 'listen: received ACK'
         conn.SND_UNA = segment.ACK - conn.ISS
+        conn.SND_WND = segment.WIN
         conn.STATE = State.ESTABLISHED
-        self.SND_TIMER.start()
+
+        conn.SND_TIMER.cancel()
+        conn.SND_TIMER = threading.Timer(conn.SND_TIMEOUT, conn.send_timeout)
+        conn.SND_TIMER.start()
+
+        conn.ACK_TIMER.start()
+
+        conn._socket.setblocking(False)
 
         return (conn, conn.REMOTE_ADDR)
 
-    def recv(self, bufsize, **kwargs):
-        if not self.STATE == State.ESTABLISHED:
-            raise Exception('not connected')
 
-        if self.RCV_UNA == self.RCV_NXT: # buffer empty
-            self.recv_segment()
+    def send(self, data, **kwargs):
+        if self.STATE != State.ESTABLISHED:
+            raise NotConnected('socket not connected')
 
-        data = self.RCV_BUFFER[self.RCV_UNA:self.RCV_NXT]
-        self.RCV_UNA = self.RCV_NXT
-        return data
-
-    def send(self, string, **kwargs):
-        if not self.STATE == State.ESTABLISHED:
-            raise Exception('not connected')
-
-        self.SND_RDY += len(string)
-        self.SND_BUFFER[self.SND_NXT:self.SND_RDY] = string
-
-        self.send_segment()
-
-    def close(self):
-        self.STATE = State.CLOSED
-        self._socket.close()
-
-    def send_segment(self):
-        # copy 'LEN' bytes of data from buffer and move buffer pointer
         segment = Segment()
-        segment.PAYLOAD = self.SND_BUFFER[self.SND_NXT:self.SND_RDY]
-        segment.SEQ = self.ISS + self.SND_NXT
-        segment.ACK = self.IRS + self.RCV_UNA
-        segment.FLAGS = Flags.FLAG_ACK
+        segment.PAYLOAD = data
+        segment.FLAGS = Flags.FLAG_ACK | Flags.FLAG_DATA
 
-        self.SND_NXT = self.SND_RDY
+        self.lock.acquire()
 
-        if self.DELAYED_SEND is not None:
-            print 'SEND: ', str(self.DELAYED_SEND)
-            self._socket.sendto(self.DELAYED_SEND.to_data(), self.REMOTE_ADDR)
-            self.DELAYED_SEND = None
+        # block until there is space on window
+        while len(self.SND_BUFFER) >= self.BUFFER_SIZE:
+            self.lock.release()
+            self.sync()
+            self.lock.acquire()
 
-        self.RETRANS_QUEUE.append(segment)
+        segment.SEQ = self.ISS + self.SND_RDY
+        self.push_send_buffer(segment)
 
-        if random.uniform(0,1) < self.PLOSS:
-            return
+        self.lock.release()
 
-        if random.uniform(0,1) < self.PDELAY:
-            self.DELAYED_SEND = segment
-            return
+        self.sync()
 
-        if random.uniform(0,1) < self.PDUP:
-            self.DELAYED_SEND = segment
+    def recv(self, bufsiz, **kwargs):
+        if self.STATE != State.ESTABLISHED:
+            raise NotConnected('socket not connected')
 
-        print 'SEND: ', str(segment)
-        self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
+        segment = None
 
-    def recv_segment(self):
-        while True:
+        while segment is None:
+            self.sync()
+
+            self.lock.acquire()
+            segment = self.pop_recv_buffer()
+            self.lock.release()
+
+        return segment.PAYLOAD
+
+    def sync(self):
+        if self.STATE != State.ESTABLISHED:
+            raise NotConnected('socket not connected')
+
+        self.lock.acquire()
+
+        avail = True
+        try:
             data, addr = self._recvfrom_wrapper(4096)
+        except socket.error as (code, msg):
+            if code == errno.EAGAIN:
+                avail = False
+            else:
+                raise
+
+        if avail:
             segment = Segment.from_data(data)
 
             print 'RECEIVE: ', str(segment)
 
-            if (segment.FLAGS & Flags.FLAG_SYN) != 0:
-                print 'WARNING: RECEIVED A SYN AT MIDDLE OF CONNECTION'
-                continue
+            if segment.SEQ == -1:
+                # send FIN ACK
+                segment = Segment()
+                segment.SEQ = -1
+                self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
 
-            if (segment.FLAGS & Flags.FLAG_NACK) != 0:
-                if len(self.RETRANS_QUEUE) == 0:
-                    print 'ERROR: NACK RECEIVED BUT RETRANS QUEUE IS EMPTY'
-                else:
-                    print 'WARNING: RECEIVED NACK, RESENDING (SEG.SEQ=%d, SEQ.ACK=%d, SND.NXT=%d, SND.UNA=%d)' % (segment.SEQ, segment.ACK, self.SND_NXT, self.SND_UNA)
-                    self.SND_NXT = self.SND_UNA
-                    resend = self.RETRANS_QUEUE[0]
-                    self._socket.sendto(resend.to_data(), self.REMOTE_ADDR)
-                    self.SND_TIMER.reset()
-
-            if (segment.SEQ - self.IRS) == self.RCV_NXT:
-                LEN = len(segment.PAYLOAD)
-                self.RCV_BUFFER[self.RCV_NXT:self.RCV_NXT+LEN] = segment.PAYLOAD
-                self.RCV_NXT += LEN
-
-                if (segment.FLAGS & Flags.FLAG_ACK) != 0:
-                    self.SND_UNA = segment.ACK - self.ISS
-                    self.SND_TIMER.reset()
-
-                    while (len(self.RETRANS_QUEUE) > 0) and (self.RETRANS_QUEUE[0].SEQ <= segment.ACK):
-                        del self.RETRANS_QUEUE[0]
-
-                if LEN > 0:
-                    # now there is data on the buffer
-                    return
-
-            elif (segment.SEQ - self.IRS) < self.RCV_NXT:
-                print 'WARNING: DUPLICATED SEGMENT, DISCARDING (SEG.SEQ=%d, RCV_NXT=%d)' % (segment.SEQ, self.RCV_NXT + self.IRS)
+                self.lock.release()
+                self.close(False)
+                self.lock.acquire()
 
             else:
-                print 'WARNING: SEGMENT OUT OF ORDER, SENDING NACK (SEG.SEQ=%d, RCV_NXT=%d)' % (segment.SEQ, self.RCV_NXT + self.IRS)
+                if (segment.FLAGS & Flags.FLAG_ACK) != 0:
+                    num_segments_acked = segment.ACK - self.ISS - self.SND_UNA
+                    for i in range(num_segments_acked):
+                        self.SND_BUFFER.popleft()
+                    self.SND_UNA = segment.ACK - self.ISS
+                    self.SND_WND = segment.WIN
+                    self.SND_TIMER.cancel()
+                    self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
+                    self.SND_TIMER.start()
 
-                #self.send_nack()
+                if (segment.FLAGS & Flags.FLAG_NACK) != 0:
+                    print 'NACK: ', str(segment)
+
+                    num_segments_acked = segment.ACK - self.ISS - self.SND_UNA
+                    for i in range(num_segments_acked):
+                        self.SND_BUFFER.popleft()
+                    self.SND_UNA = segment.ACK - self.ISS
+                    self.SND_WND = segment.WIN
+                    self.SND_TIMER.cancel()
+                    self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
+                    self.SND_TIMER.start()
+
+                    send_segment = self.SND_BUFFER[0]
+                    send_segment.ACK = self.IRS + self.RCV_UNA
+                    send_segment.WIN = self.RCV_WND
+                    print 'RETRANS (NACK): ', str(send_segment)
+                    self._socket.sendto(send_segment.to_data(), self.REMOTE_ADDR)
+
+                if (segment.FLAGS & Flags.FLAG_DATA) != 0:
+                    if (segment.SEQ - self.IRS) == self.RCV_NXT:
+                        self.RCV_BUFFER.append(segment)
+                        self.RCV_WND -= 1
+                        self.SND_WND = segment.WIN
+                        self.RCV_NXT += 1
+                        self.ACK_PENDING = True
+
+                    elif (segment.SEQ - self.IRS) < self.RCV_NXT:
+                        print 'DUP: ', str(segment)
+
+                    else:
+                        print 'OUT OR ORDER: ', str(segment)
+                        self.NACK_PENDING = True
+
+
+        if (self.SND_RDY > self.SND_NXT) and (self.SND_WND > 0):
+            send_segment = self.SND_BUFFER[self.SND_RDY-1-self.SND_UNA]
+            send_segment.ACK = self.IRS + self.RCV_UNA
+            send_segment.WIN = self.RCV_WND
+
+            # send delayed segment if set in the last loop
+            if self.DELAYED_SEND is not None:
+                print 'SEND (DELAYED): ', str(self.DELAYED_SEND)
+                self._socket.sendto(self.DELAYED_SEND.to_data(), self.REMOTE_ADDR)
+                self.DELAYED_SEND = None
+
+            # set the current segment as delayed (will be sent in the next loop)
+            if random.uniform(0,1) < self.PDELAY:
+                self.DELAYED_SEND = send_segment
+
+            # send the segment twice
+            elif random.uniform(0,1) < self.PDUP:
+                print 'SEND (DUPLICATE): ', str(send_segment)
+                self._socket.sendto(send_segment.to_data(), self.REMOTE_ADDR)
+                self._socket.sendto(send_segment.to_data(), self.REMOTE_ADDR)
+
+            # do not send the segment
+            elif random.uniform(0,1) < self.PLOSS:
+                print 'SEND (LOST): ', str(send_segment)
+
+            # normal send
+            else:
+                print 'SEND: ', str(send_segment)
+                self._socket.sendto(send_segment.to_data(), self.REMOTE_ADDR)
+
+            self.SND_NXT += 1
+            self.SND_WND -= 1
+
+            self.ACK_TIMER.cancel()
+            self.ACK_TIMER = threading.Timer(self.ACK_TIMEOUT, self.ack_timeout)
+            self.ACK_TIMER.start()
+
+        self.lock.release()
+
+    def push_send_buffer(self, segment):
+        self.SND_BUFFER.append(segment)
+        self.SND_RDY += 1
+
+    def pop_recv_buffer(self):
+        if self.RCV_NXT == self.RCV_UNA:
+            return None
+
+        segment = self.RCV_BUFFER.popleft()
+        self.RCV_WND += 1
+        self.RCV_UNA += 1
+        return segment
 
     def send_nack(self):
         segment = Segment()
+        segment.SEQ = self.ISS + self.SND_RDY
+        segment.ACK = self.IRS + self.RCV_UNA
+        segment.WIN = self.RCV_WND
+        segment.FLAGS = Flags.FLAG_NACK
+        print 'SEND NACK: ', str(segment)
+        self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
+
+    def send_ack(self):
+        segment = Segment()
         segment.SEQ = self.ISS + self.SND_NXT
         segment.ACK = self.IRS + self.RCV_UNA
-        segment.FLAGS = Flags.FLAG_NACK
-        print 'SEND: ', str(segment)
+        segment.WIN = self.RCV_WND
+        segment.FLAGS = Flags.FLAG_ACK
+        print 'SEND ACK: ', str(segment)
         self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
 
     def send_timeout(self):
-        if self.STATE == State.SYN_SENT:
-            # resend SYN
-            pass
-        elif self.STATE == State.SYN_RECV:
-            # resend ACK
-            pass
-        elif self.STATE == State.ESTABLISHED:
-            if len(self.RETRANS_QUEUE) > 0:
-                resend = self.RETRANS_QUEUE[0]
-                print 'RETRANS: ', str(resend)
-                self._socket.sendto(resend.to_data(), self.REMOTE_ADDR)
+        if self.STATE != State.ESTABLISHED:
+            return
 
-        self.SND_TIMER.reset()
+        self.lock.acquire()
+
+        if self.SND_NXT > self.SND_UNA:
+            print 'RETRANSMITTING...', self.SND_NXT, self.SND_UNA, self.SND_RDY, self.SND_WND
+            self.SND_NXT = self.SND_UNA
+            #segment = self.SND_BUFFER[0]
+            #segment.ACK = self.IRS + self.RCV_UNA
+            #segment.WIN = self.RCV_WND
+            #print 'RETRANS: ', str(segment)
+            #self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
+
+        self.SND_TIMER.cancel()
+        self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
+        self.SND_TIMER.start()
+
+        self.lock.release()
+
+    def ack_timeout(self):
+        if self.STATE != State.ESTABLISHED:
+            return
+
+        self.lock.acquire()
+
+        if self.ACK_PENDING:
+            self.send_ack()
+            self.ACK_PENDING = False
+        if self.NACK_PENDING:
+            self.send_nack()
+            self.NACK_PENDING = False
+
+        self.ACK_TIMER.cancel()
+        self.ACK_TIMER = threading.Timer(self.ACK_TIMEOUT, self.ack_timeout)
+        self.ACK_TIMER.start()
+
+        self.lock.release()
 
     def _recvfrom_wrapper(self, bufsiz):
         while True:
@@ -319,6 +443,81 @@ class Socket(object):
             except socket.error as (code, msg):
                 if code != errno.EINTR:
                     raise
+
+    def close(self, send_fin=True):
+        self.lock.acquire()
+
+        if send_fin:
+            # wait 'til buffers flushes
+            while (len(self.SND_BUFFER) > 0) or (len(self.RCV_BUFFER) > 0):
+                self.lock.release()
+                self.sync()
+                self.lock.acquire()
+
+            # stop timers
+            self.SND_TIMER.cancel()
+            self.ACK_TIMER.cancel()
+
+            if self.ACK_PENDING:
+                self.send_ack()
+                self.ACK_PENDING = False
+
+            self._socket.setblocking(True)
+
+            # send FIN
+            segment = Segment()
+            segment.SEQ = -1
+            print 'SEND FIN: ', str(segment)
+            self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
+
+            # wait for an FIN ACK
+            while True:
+                data, addr = self._recvfrom_wrapper(1024)
+                segment = Segment.from_data(data)
+
+                if (segment.SEQ) == -1:
+                    print 'RECEIVE FIN ACK: ', str(segment)
+                    break
+
+        # stop timers (if not stopped already)
+        self.SND_TIMER.cancel()
+        self.ACK_TIMER.cancel()
+
+        # close the socket
+        self.STATE = State.CLOSED
+        self._socket.close()
+
+        self.lock.release()
+
+    # def send_segment(self):
+    #     # copy 'LEN' bytes of data from buffer and move buffer pointer
+    #     segment = Segment()
+    #     segment.PAYLOAD = self.SND_BUFFER[self.SND_NXT:self.SND_RDY]
+    #     segment.SEQ = self.ISS + self.SND_NXT
+    #     segment.ACK = self.IRS + self.RCV_UNA
+    #     segment.FLAGS = Flags.FLAG_ACK
+
+    #     self.SND_NXT = self.SND_RDY
+
+    #     if self.DELAYED_SEND is not None:
+    #         print 'SEND: ', str(self.DELAYED_SEND)
+    #         self._socket.sendto(self.DELAYED_SEND.to_data(), self.REMOTE_ADDR)
+    #         self.DELAYED_SEND = None
+
+    #     self.RETRANS_QUEUE.append(segment)
+
+    #     if random.uniform(0,1) < self.PLOSS:
+    #         return
+
+    #     if random.uniform(0,1) < self.PDELAY:
+    #         self.DELAYED_SEND = segment
+    #         return
+
+    #     if random.uniform(0,1) < self.PDUP:
+    #         self.DELAYED_SEND = segment
+
+    #     print 'SEND: ', str(segment)
+    #     self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
 
 class Segment(object):
     def __init__(self):
@@ -330,14 +529,14 @@ class Segment(object):
         self.PAYLOAD = ''
 
     def __str__(self):
-        return "(SEQ=%d ACK=%d FLAGS=%d WIN=%d)" % (self.SEQ, self.ACK, self.FLAGS, self.WIN)
+        return "(SEQ=%d ACK=%d FLAGS=%d WIN=%d '%s')" % (self.SEQ, self.ACK, self.FLAGS, self.WIN, self.PAYLOAD)
 
     @staticmethod
     def from_data(data):
         segment = Segment()
 
         segment.SEQ, segment.ACK, segment.FLAGS, segment.WIN, \
-                segment.CHECKSUM = struct.unpack('!IIHHH', data[0:14])
+                segment.CHECKSUM = struct.unpack('!iiHHH', data[0:14])
         segment.PAYLOAD = data[14:]
 
         if segment.calculate_checksum(data[0:14]) != 0:
@@ -346,7 +545,7 @@ class Segment(object):
         return segment
 
     def to_data(self):
-        header = struct.pack('!IIHH', self.SEQ, self.ACK, self.FLAGS, self.WIN)
+        header = struct.pack('!iiHH', self.SEQ, self.ACK, self.FLAGS, self.WIN)
         self.CHECKSUM = struct.pack('!H', self.calculate_checksum(header))
         return header + self.CHECKSUM + self.PAYLOAD
 
