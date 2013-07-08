@@ -146,8 +146,6 @@ class Socket(object):
         self.ACK_TIMER.start()
         self.STATE = State.ESTABLISHED
 
-        self._socket.setblocking(False)
-
     def listen(self):
         self.STATE = State.LISTEN
 
@@ -208,8 +206,6 @@ class Socket(object):
 
         conn.ACK_TIMER.start()
 
-        conn._socket.setblocking(False)
-
         return (conn, conn.REMOTE_ADDR)
 
 
@@ -226,7 +222,7 @@ class Socket(object):
         # block until there is space on window
         while len(self.SND_BUFFER) >= self.BUFFER_SIZE:
             self.lock.release()
-            self.sync()
+            self.sync(blocking=True)
             self.lock.acquire()
 
         segment.SEQ = self.ISS + self.SND_RDY
@@ -243,7 +239,7 @@ class Socket(object):
         segment = None
 
         while segment is None:
-            self.sync()
+            self.sync(blocking=True)
 
             self.lock.acquire()
             segment = self.pop_recv_buffer()
@@ -251,20 +247,25 @@ class Socket(object):
 
         return segment.PAYLOAD
 
-    def sync(self):
+    def sync(self, blocking=False):
         if self.STATE != State.ESTABLISHED:
             raise NotConnected('socket not connected')
 
-        self.lock.acquire()
+        self._socket.setblocking(blocking)
 
         avail = True
         try:
+
             data, addr = self._recvfrom_wrapper(4096)
         except socket.error as (code, msg):
             if code == errno.EAGAIN:
                 avail = False
             else:
                 raise
+
+        self._socket.setblocking(True)
+
+        self.lock.acquire()
 
         if avail:
             segment = Segment.from_data(data)
@@ -461,8 +462,6 @@ class Socket(object):
             if self.ACK_PENDING:
                 self.send_ack()
                 self.ACK_PENDING = False
-
-            self._socket.setblocking(True)
 
             # send FIN
             segment = Segment()
