@@ -20,6 +20,7 @@ import struct
 import scheduler
 import random
 import threading
+import errno
 
 class State:
     CLOSED = 0
@@ -94,6 +95,7 @@ class Socket(object):
         syn.FLAGS = Flags.FLAG_SYN
         syn.WIN = self.SND_WND
         syn.SEQ = self.ISS + self.SND_NXT
+        print 'SEND: ', str(syn)
         self._socket.sendto(syn.to_data(), address)
         self.SND_RDY += 1
         self.SND_NXT += 1
@@ -103,7 +105,7 @@ class Socket(object):
         self.SND_TIMER.start()
 
         while True:
-            data, addr = self._socket.recvfrom(4096)
+            data, addr = self._recvfrom_wrapper(4096)
             segment = Segment.from_data(data)
 
             if ((segment.FLAGS & Flags.FLAG_ACK) != 0) and ((segment.FLAGS & Flags.FLAG_SYN) != 0):
@@ -124,6 +126,7 @@ class Socket(object):
         ack.WIN = self.SND_WND
         ack.SEQ = self.ISS + self.SND_NXT
         ack.ACK = self.IRS + self.RCV_UNA
+        print 'SEND: ', str(ack)
         self._socket.sendto(ack.to_data(), self.REMOTE_ADDR)
         print 'connect: sent ACK'
 
@@ -138,7 +141,7 @@ class Socket(object):
 
         # loop until receive a SYN
         while True:
-            data, addr = self._socket.recvfrom(1024)
+            data, addr = self._recvfrom_wrapper(1024)
             segment = Segment.from_data(data)
 
             if (segment.FLAGS & Flags.FLAG_SYN) != 0:
@@ -161,6 +164,7 @@ class Socket(object):
         syn_ack.WIN = conn.SND_WND
         syn_ack.SEQ = conn.ISS + conn.SND_NXT
         syn_ack.ACK = conn.IRS + conn.RCV_UNA
+        print 'SEND: ', str(syn_ack)
         conn._socket.sendto(syn_ack.to_data(), conn.REMOTE_ADDR)
         conn.SND_RDY += 1
         conn.SND_NXT += 1
@@ -171,7 +175,7 @@ class Socket(object):
 
         # wait for an ACK
         while True:
-            data, addr = conn._socket.recvfrom(1024)
+            data, addr = conn._recvfrom_wrapper(1024)
             segment = Segment.from_data(data)
 
             if (segment.FLAGS & Flags.FLAG_ACK) != 0:
@@ -221,6 +225,7 @@ class Socket(object):
         self.SND_NXT = self.SND_RDY
 
         if self.DELAYED_SEND is not None:
+            print 'SEND: ', str(self.DELAYED_SEND)
             self._socket.sendto(self.DELAYED_SEND.to_data(), self.REMOTE_ADDR)
             self.DELAYED_SEND = None
 
@@ -236,23 +241,29 @@ class Socket(object):
         if random.uniform(0,1) < self.PDUP:
             self.DELAYED_SEND = segment
 
+        print 'SEND: ', str(segment)
         self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
 
     def recv_segment(self):
         while True:
-            data, addr = self._socket.recvfrom(4096)
+            data, addr = self._recvfrom_wrapper(4096)
             segment = Segment.from_data(data)
+
+            print 'RECEIVE: ', str(segment)
 
             if (segment.FLAGS & Flags.FLAG_SYN) != 0:
                 print 'WARNING: RECEIVED A SYN AT MIDDLE OF CONNECTION'
                 continue
 
             if (segment.FLAGS & Flags.FLAG_NACK) != 0:
-                print 'WARNING: RECEIVED NACK, RESENDING (SEG.SEQ=%d, SEQ.ACK=%d, SND.NXT=%d, SND.UNA=%d)' % (segment.SEQ, segment.ACK, self.SND_NXT, self.SND_UNA)
-                self.SND_NXT = self.SND_UNA
-                resend = self.RETRANS_QUEUE[0]
-                self._socket.sendto(resend.to_data(), self.REMOTE_ADDR)
-                self.SND_TIMER.reset()
+                if len(self.RETRANS_QUEUE) == 0:
+                    print 'ERROR: NACK RECEIVED BUT RETRANS QUEUE IS EMPTY'
+                else:
+                    print 'WARNING: RECEIVED NACK, RESENDING (SEG.SEQ=%d, SEQ.ACK=%d, SND.NXT=%d, SND.UNA=%d)' % (segment.SEQ, segment.ACK, self.SND_NXT, self.SND_UNA)
+                    self.SND_NXT = self.SND_UNA
+                    resend = self.RETRANS_QUEUE[0]
+                    self._socket.sendto(resend.to_data(), self.REMOTE_ADDR)
+                    self.SND_TIMER.reset()
 
             if (segment.SEQ - self.IRS) == self.RCV_NXT:
                 LEN = len(segment.PAYLOAD)
@@ -263,9 +274,8 @@ class Socket(object):
                     self.SND_UNA = segment.ACK - self.ISS
                     self.SND_TIMER.reset()
 
-                    if len(self.RETRANS_QUEUE) > 0:
-                        while self.RETRANS_QUEUE[0].SEQ <= segment.ACK:
-                            del self.RETRANS_QUEUE[0]
+                    while (len(self.RETRANS_QUEUE) > 0) and (self.RETRANS_QUEUE[0].SEQ <= segment.ACK):
+                        del self.RETRANS_QUEUE[0]
 
                 if LEN > 0:
                     # now there is data on the buffer
@@ -276,6 +286,7 @@ class Socket(object):
 
             else:
                 print 'WARNING: SEGMENT OUT OF ORDER, SENDING NACK (SEG.SEQ=%d, RCV_NXT=%d)' % (segment.SEQ, self.RCV_NXT + self.IRS)
+
                 #self.send_nack()
 
     def send_nack(self):
@@ -283,6 +294,7 @@ class Socket(object):
         segment.SEQ = self.ISS + self.SND_NXT
         segment.ACK = self.IRS + self.RCV_UNA
         segment.FLAGS = Flags.FLAG_NACK
+        print 'SEND: ', str(segment)
         self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
 
     def send_timeout(self):
@@ -295,9 +307,18 @@ class Socket(object):
         elif self.STATE == State.ESTABLISHED:
             if len(self.RETRANS_QUEUE) > 0:
                 resend = self.RETRANS_QUEUE[0]
+                print 'RETRANS: ', str(resend)
                 self._socket.sendto(resend.to_data(), self.REMOTE_ADDR)
 
         self.SND_TIMER.reset()
+
+    def _recvfrom_wrapper(self, bufsiz):
+        while True:
+            try:
+                return self._socket.recvfrom(bufsiz)
+            except socket.error as (code, msg):
+                if code != errno.EINTR:
+                    raise
 
 class Segment(object):
     def __init__(self):
@@ -309,8 +330,7 @@ class Segment(object):
         self.PAYLOAD = ''
 
     def __str__(self):
-        return str((self.SEQ, self.ACK, self.FLAGS, \
-            self.WIN, self.CHECKSUM, self.PAYLOAD))
+        return "(SEQ=%d ACK=%d FLAGS=%d WIN=%d)" % (self.SEQ, self.ACK, self.FLAGS, self.WIN)
 
     @staticmethod
     def from_data(data):

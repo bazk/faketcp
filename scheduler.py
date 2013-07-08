@@ -21,6 +21,7 @@ import time
 
 class Timer:
     def __init__(self, timeout, callback, *args, **kwargs):
+        self.initial_timeout = float(timeout)
         self.timeout = float(timeout)
         self.callback = callback
         self.args = args
@@ -43,10 +44,8 @@ class Timer:
         self.scheduler.remove_timer(self)
 
     def reset(self):
-        if not self.running:
-            return
-
         self.scheduler.remove_timer(self)
+        self.timeout = self.initial_timeout
         self.scheduler.add_timer(self)
 
     def timeout_handler(self):
@@ -67,25 +66,31 @@ class Scheduler:
         self.last_update = None
 
     def add_timer(self, timer):
+        self.update_alarm()
         heapq.heappush(self.timers, (timer.timeout, timer))
         self.update_alarm()
 
     def remove_timer(self, timer):
-        for i in range(self.timers):
+        for i in range(len(self.timers)):
             if self.timers[i] == timer:
                 del self.timers[i]
+                break
 
         self.update_alarm()
 
     def update_alarm(self):
-        if len(self.timers) == 0:
-            signal.alarm(0)
-            return
-
         if self.last_update is None:
             diff = 0
         else:
             diff = time.time() - self.last_update
+
+        self.last_update = time.time()
+
+        if len(self.timers) == 0:
+            signal.alarm(0)
+            return
+
+        self.last_update = time.time()
 
         new_queue = []
         smallest = None
@@ -107,13 +112,9 @@ class Scheduler:
 
 
         if smallest is None:
-            print 'smallest = None, queue=%s' % (self.timers)
             signal.alarm(0)
         else:
-            print 'smallest = %f, queue=%s' % (smallest, self.timers)
             signal.setitimer(signal.ITIMER_REAL, smallest)
-
-        self.last_update = time.time()
 
     def alarm_handler(self, signum, frame):
         if len(self.timers) == 0:
