@@ -21,7 +21,6 @@ import random
 import threading
 import errno
 import collections
-import atexit
 
 class State:
     CLOSED = 0
@@ -448,75 +447,46 @@ class Socket(object):
     def close(self, send_fin=True):
         self.lock.acquire()
 
-        if send_fin:
-            # wait 'til buffers flushes
-            while (len(self.SND_BUFFER) > 0) or (len(self.RCV_BUFFER) > 0):
-                self.lock.release()
-                self.sync()
-                self.lock.acquire()
+        if self.STATE == State.ESTABLISHED:
+            if send_fin:
+                # wait 'til buffers flushes
+                while (len(self.SND_BUFFER) > 0) or (len(self.RCV_BUFFER) > 0):
+                    self.lock.release()
+                    self.sync()
+                    self.lock.acquire()
 
-            # stop timers
+                # stop timers
+                self.SND_TIMER.cancel()
+                self.ACK_TIMER.cancel()
+
+                if self.ACK_PENDING:
+                    self.send_ack()
+                    self.ACK_PENDING = False
+
+                # send FIN
+                segment = Segment()
+                segment.SEQ = -1
+                print 'SEND FIN: ', str(segment)
+                self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
+
+                # wait for an FIN ACK
+                while True:
+                    data, addr = self._recvfrom_wrapper(1024)
+                    segment = Segment.from_data(data)
+
+                    if (segment.SEQ) == -1:
+                        print 'RECEIVE FIN ACK: ', str(segment)
+                        break
+
+            # stop timers (if not stopped already)
             self.SND_TIMER.cancel()
             self.ACK_TIMER.cancel()
-
-            if self.ACK_PENDING:
-                self.send_ack()
-                self.ACK_PENDING = False
-
-            # send FIN
-            segment = Segment()
-            segment.SEQ = -1
-            print 'SEND FIN: ', str(segment)
-            self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
-
-            # wait for an FIN ACK
-            while True:
-                data, addr = self._recvfrom_wrapper(1024)
-                segment = Segment.from_data(data)
-
-                if (segment.SEQ) == -1:
-                    print 'RECEIVE FIN ACK: ', str(segment)
-                    break
-
-        # stop timers (if not stopped already)
-        self.SND_TIMER.cancel()
-        self.ACK_TIMER.cancel()
 
         # close the socket
         self.STATE = State.CLOSED
         self._socket.close()
 
         self.lock.release()
-
-    # def send_segment(self):
-    #     # copy 'LEN' bytes of data from buffer and move buffer pointer
-    #     segment = Segment()
-    #     segment.PAYLOAD = self.SND_BUFFER[self.SND_NXT:self.SND_RDY]
-    #     segment.SEQ = self.ISS + self.SND_NXT
-    #     segment.ACK = self.IRS + self.RCV_UNA
-    #     segment.FLAGS = Flags.FLAG_ACK
-
-    #     self.SND_NXT = self.SND_RDY
-
-    #     if self.DELAYED_SEND is not None:
-    #         print 'SEND: ', str(self.DELAYED_SEND)
-    #         self._socket.sendto(self.DELAYED_SEND.to_data(), self.REMOTE_ADDR)
-    #         self.DELAYED_SEND = None
-
-    #     self.RETRANS_QUEUE.append(segment)
-
-    #     if random.uniform(0,1) < self.PLOSS:
-    #         return
-
-    #     if random.uniform(0,1) < self.PDELAY:
-    #         self.DELAYED_SEND = segment
-    #         return
-
-    #     if random.uniform(0,1) < self.PDUP:
-    #         self.DELAYED_SEND = segment
-
-    #     print 'SEND: ', str(segment)
-    #     self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
 
 class Segment(object):
     def __init__(self):

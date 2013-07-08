@@ -19,41 +19,20 @@
 import argparse
 import faketcp
 
-def test_simple(socket):
-
-    print 'Sending packet number 1...'
-    socket.send('this is the packet number 1')
-
-    print 'Sending packet number 2...'
-    socket.send('this is the packet number 2')
-
-    print 'Sending packet number 3...'
-    socket.send('this is the packet number 3')
-
-    print 'Waiting for response packet number 1'
-    data = socket.recv(1024)
-    print 'Response packet number 1: ', data
-
-    print 'Sending packet number 4...'
-    socket.send('this is the packet number 4')
-
-def test_send(socket):
-    for i in range(50):
-        socket.send('this is the packet number %d' % i)
-
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description='FakeTCP client')
 
-    parser.add_argument('host', metavar='HOST', type=str, help='Hostname or ip address of the server')
-    parser.add_argument('port', metavar='PORT', type=int, default=50007, nargs='?', help='Port of the server')
+    parser.add_argument('host', metavar='HOST', type=str, help='hostname or ip address of the server')
+    parser.add_argument('port', metavar='PORT', type=int, default=50007, nargs='?', help='port of the server')
 
     parser.add_argument('--ploss', metavar='PLOSS', type=float, default=0.0, help='probability of packet loss between 0.0 and 1.0, defaults to 0.0.')
     parser.add_argument('--pdup', metavar='PDUP', type=float, default=0.0, help='probability of packet duplication between 0.0 and 1.0, defaults to 0.0.')
     parser.add_argument('--pdelay', metavar='PDELAY', type=float, default=0.0, help='probability of packet delayed (and arriving out of order) between 0.0 and 1.0, defaults to 0.0.')
 
-    parser.add_argument('--test', metavar='TEST', type=str, default='simple', help='select what test to run.')
+    parser.add_argument('-n', '--num', metavar='NUM', type=int, default=16, help='number of datagrams to send.')
 
     args = parser.parse_args()
+    print args
 
     socket = faketcp.Socket(ploss=args.ploss, pdup=args.pdup, pdelay=args.pdelay)
 
@@ -61,7 +40,7 @@ if __name__=="__main__":
     socket.connect((args.host, args.port))
     print 'Connection estabilished.'
 
-    print 'Running test ', args.test
-    locals()['test_'+args.test](socket)
+    for i in range(args.num):
+        socket.send('this is the packet number %d' % i)
 
     socket.close()

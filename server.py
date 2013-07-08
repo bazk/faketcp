@@ -16,46 +16,34 @@
 # You should have received a copy of the GNU General Public License
 # along with faketcp. If not, see <http://www.gnu.org/licenses/>.
 
+import argparse
 import faketcp
-import socket
 
 if __name__=="__main__":
-    HOST = ''
-    PORT = 50007
+    parser = argparse.ArgumentParser(description='FakeTCP server')
 
-    s = faketcp.Socket()
-    s.bind((HOST, PORT))
-    s.listen()
+    parser.add_argument('host', metavar='HOST', type=str, default='', nargs='?', help='bind address')
+    parser.add_argument('port', metavar='PORT', type=int, default=50007, nargs='?', help='bind port')
+
+    parser.add_argument('--ploss', metavar='PLOSS', type=float, default=0.0, help='probability of packet loss between 0.0 and 1.0, defaults to 0.0.')
+    parser.add_argument('--pdup', metavar='PDUP', type=float, default=0.0, help='probability of packet duplication between 0.0 and 1.0, defaults to 0.0.')
+    parser.add_argument('--pdelay', metavar='PDELAY', type=float, default=0.0, help='probability of packet delayed (and arriving out of order) between 0.0 and 1.0, defaults to 0.0.')
+
+    args = parser.parse_args()
+
+    socket = faketcp.Socket(ploss=args.ploss, pdup=args.pdup, pdelay=args.pdelay)
+    socket.bind((args.host, args.port))
+    socket.listen()
 
     while True:
-        print 'Listening for new connection on port ', PORT, '...'
-        conn, addr = s.accept()
+        print 'Listening for new connection on ', args.host, ':', args.port, '...'
+        conn, addr = socket.accept()
 
         print 'Connection estabilished (', addr, ').'
-
         while True:
             try:
                 conn.recv(1024)
             except faketcp.NotConnected:
                 break
 
-        # print 'Waiting for packet number 1...'
-        # data = conn.recv(1024)
-        # print 'Received packet number 1: ', data
-
-        # print 'Waiting for packet number 2...'
-        # data = conn.recv(1024)
-        # print 'Received packet number 2: ', data
-
-        # print 'Waiting for packet number 3...'
-        # data = conn.recv(1024)
-        # print 'Received packet number 3: ', data
-
-        # print 'Sending response packet number 1...'
-        # conn.send('this is the response packet number 1')
-
-        # print 'Waiting for packet number 4...'
-        # data = conn.recv(1024)
-        # print 'Received packet number 4: ', data
-
-        #conn.close()
+    socket.close()
