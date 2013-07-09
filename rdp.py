@@ -21,6 +21,9 @@ import random
 import threading
 import errno
 import collections
+import logging
+
+__log__ = logging.getLogger(__name__)
 
 class State:
     CLOSED = 0
@@ -39,6 +42,9 @@ class ChecksumError(Exception):
     pass
 
 class NotConnected(Exception):
+    pass
+
+class AlreadyConnected(Exception):
     pass
 
 class Socket(object):
@@ -78,6 +84,8 @@ class Socket(object):
 
         self.lock = threading.Lock()
 
+        __log__.info(str(self))
+
     def __str__(self):
         if self.STATE == 0: state = 'CLOSED'
         elif self.STATE == 1: state = 'LISTEN'
@@ -86,26 +94,26 @@ class Socket(object):
         elif self.STATE == 4: state = 'ESTABLISHED'
         else: state = 'UNKNOWN'
 
-        return 'Socket (STATE=%s, SND_NXT=%d, SND_UNA=%d, SND_WND=%d, ISS=%d,\
+        return 'SOCKET(STATE=%s, SND_NXT=%d, SND_UNA=%d, SND_WND=%d, ISS=%d,\
  RCV_NXT=%d, RCV_UNA=%d, RCV_WND=%d, IRS=%d)' % (state, self.SND_NXT, \
              self.SND_UNA, self.SND_WND, self.ISS, self.RCV_NXT, \
              self.RCV_UNA, self.RCV_WND, self.IRS)
 
     def bind(self, address):
         if self.STATE == State.ESTABLISHED:
-            raise Exception('already connected')
+            raise AlreadyConnected('Cannot bind an already connected socket.')
 
         self._socket.bind(address)
 
     def connect(self, address):
         if self.STATE == State.ESTABLISHED:
-            raise Exception('already connected')
+            raise AlreadyConnected('Connection already established, cannot connect again.')
 
-        syn = Segment()
+        syn = ReliableDatagram()
         syn.FLAGS = Flags.FLAG_SYN
         syn.WIN = self.RCV_WND
         syn.SEQ = self.ISS
-        print 'SEND: ', str(syn)
+        __log__.info('SEND: ' + str(syn))
         self._socket.sendto(syn.to_data(), address)
 
         self.SND_RDY += 1
@@ -116,30 +124,30 @@ class Socket(object):
 
         while True:
             data, addr = self._recvfrom_wrapper(4096)
-            segment = Segment.from_data(data)
-            print 'RECEIVE: ', str(segment)
+            datagram = ReliableDatagram.from_data(data)
+            __log__.info('RECV: ' + str(datagram))
 
-            if ((segment.FLAGS & Flags.FLAG_ACK) != 0) and ((segment.FLAGS & Flags.FLAG_SYN) != 0):
+            if ((datagram.FLAGS & Flags.FLAG_ACK) != 0) and ((datagram.FLAGS & Flags.FLAG_SYN) != 0):
                 break
 
         self.SND_TIMER.cancel()
         self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
         self.SND_TIMER.start()
 
-        self.SND_UNA = segment.ACK - self.ISS
-        self.SND_WND = segment.WIN
+        self.SND_UNA = datagram.ACK - self.ISS
+        self.SND_WND = datagram.WIN
 
         self.REMOTE_ADDR = addr
-        self.IRS = segment.SEQ
+        self.IRS = datagram.SEQ
         self.RCV_NXT += 1
         self.RCV_UNA += 1
 
-        ack = Segment()
+        ack = ReliableDatagram()
         ack.FLAGS = Flags.FLAG_ACK
         ack.WIN = self.RCV_WND
         ack.SEQ = self.ISS + self.SND_NXT
         ack.ACK = self.IRS + self.RCV_UNA
-        print 'SEND: ', str(ack)
+        __log__.info('SEND: ' + str(ack))
         self._socket.sendto(ack.to_data(), self.REMOTE_ADDR)
 
         self.ACK_TIMER.start()
@@ -150,34 +158,34 @@ class Socket(object):
 
     def accept(self):
         if self.STATE == State.ESTABLISHED:
-            raise Exception('already connected')
+            raise AlreadyConnected('Connection already established, cannot accept new connections.')
 
         # loop until receive a SYN
         while True:
             data, addr = self._recvfrom_wrapper(1024)
-            segment = Segment.from_data(data)
-            print 'RECEIVE: ', str(segment)
+            datagram = ReliableDatagram.from_data(data)
+            __log__.info('RECV: ' + str(datagram))
 
-            if (segment.FLAGS & Flags.FLAG_SYN) != 0:
+            if (datagram.FLAGS & Flags.FLAG_SYN) != 0:
                 break
             else:
-                print 'Unknown segment...'
+                __log__.warning('Unknown datagram during handshake')
 
         conn = Socket()
         conn.bind(('', 0))
         conn.REMOTE_ADDR = addr
-        conn.IRS = segment.SEQ
-        conn.SND_WND = segment.WIN
+        conn.IRS = datagram.SEQ
+        conn.SND_WND = datagram.WIN
         conn.RCV_NXT += 1
         conn.RCV_UNA += 1
 
-        # send syn, ack segment
-        syn_ack = Segment()
+        # send syn, ack datagram
+        syn_ack = ReliableDatagram()
         syn_ack.FLAGS = Flags.FLAG_SYN | Flags.FLAG_ACK
         syn_ack.WIN = conn.RCV_WND
         syn_ack.SEQ = conn.ISS
         syn_ack.ACK = conn.IRS + conn.RCV_UNA
-        print 'SEND: ', str(syn_ack)
+        __log__.info('SEND: ' + str(syn_ack))
         conn._socket.sendto(syn_ack.to_data(), conn.REMOTE_ADDR)
 
         conn.SND_RDY += 1
@@ -189,14 +197,14 @@ class Socket(object):
         # wait for an ACK
         while True:
             data, addr = conn._recvfrom_wrapper(1024)
-            segment = Segment.from_data(data)
-            print 'RECEIVE: ', str(segment)
+            datagram = ReliableDatagram.from_data(data)
+            __log__.info('RECV: ' + str(datagram))
 
-            if (segment.FLAGS & Flags.FLAG_ACK) != 0:
+            if (datagram.FLAGS & Flags.FLAG_ACK) != 0:
                 break
 
-        conn.SND_UNA = segment.ACK - conn.ISS
-        conn.SND_WND = segment.WIN
+        conn.SND_UNA = datagram.ACK - conn.ISS
+        conn.SND_WND = datagram.WIN
         conn.STATE = State.ESTABLISHED
 
         conn.SND_TIMER.cancel()
@@ -212,9 +220,9 @@ class Socket(object):
         if self.STATE != State.ESTABLISHED:
             raise NotConnected('socket not connected')
 
-        segment = Segment()
-        segment.PAYLOAD = data
-        segment.FLAGS = Flags.FLAG_ACK | Flags.FLAG_DATA
+        datagram = ReliableDatagram()
+        datagram.PAYLOAD = data
+        datagram.FLAGS = Flags.FLAG_ACK | Flags.FLAG_DATA
 
         self.lock.acquire()
 
@@ -224,8 +232,9 @@ class Socket(object):
             self.sync(blocking=True)
             self.lock.acquire()
 
-        segment.SEQ = self.ISS + self.SND_RDY
-        self.push_send_buffer(segment)
+        datagram.SEQ = self.ISS + self.SND_RDY
+        self.SND_BUFFER.append(datagram)
+        self.SND_RDY += 1
 
         self.lock.release()
 
@@ -235,16 +244,21 @@ class Socket(object):
         if self.STATE != State.ESTABLISHED:
             raise NotConnected('socket not connected')
 
-        segment = None
+        self.lock.acquire()
 
-        while segment is None:
-            self.sync(blocking=True)
-
-            self.lock.acquire()
-            segment = self.pop_recv_buffer()
+        # block until a datagram arrive
+        while self.RCV_NXT == self.RCV_UNA:
             self.lock.release()
+            self.sync(blocking=True)
+            self.lock.acquire()
 
-        return segment.PAYLOAD
+        datagram = self.RCV_BUFFER.popleft()
+        self.RCV_WND += 1
+        self.RCV_UNA += 1
+
+        self.lock.release()
+
+        return datagram.PAYLOAD
 
     def sync(self, blocking=False):
         if self.STATE != State.ESTABLISHED:
@@ -267,94 +281,96 @@ class Socket(object):
         self.lock.acquire()
 
         if avail:
-            segment = Segment.from_data(data)
+            datagram = ReliableDatagram.from_data(data)
 
-            print 'RECEIVE: ', str(segment)
+            if datagram.SEQ == -1:
+                __log__.info('RECV: ' + str(datagram))
 
-            if segment.SEQ == -1:
                 # send FIN ACK
-                segment = Segment()
-                segment.SEQ = -1
-                self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
+                datagram = ReliableDatagram()
+                datagram.SEQ = -1
+                datagram.FLAGS = Flags.FLAG_ACK
+                self._socket.sendto(datagram.to_data(), self.REMOTE_ADDR)
 
                 self.lock.release()
                 self.close(False)
                 self.lock.acquire()
 
             else:
-                if (segment.FLAGS & Flags.FLAG_ACK) != 0:
-                    num_segments_acked = segment.ACK - self.ISS - self.SND_UNA
-                    for i in range(num_segments_acked):
-                        self.SND_BUFFER.popleft()
-                    self.SND_UNA = segment.ACK - self.ISS
-                    self.SND_WND = segment.WIN
-                    self.SND_TIMER.cancel()
-                    self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
-                    self.SND_TIMER.start()
+                if (datagram.FLAGS & Flags.FLAG_DATA) != 0:
+                    if (datagram.SEQ - self.IRS) < self.RCV_NXT:
+                        __log__.info('RECV (DUPLICATED): ' + str(datagram))
 
-                if (segment.FLAGS & Flags.FLAG_NACK) != 0:
-                    print 'NACK: ', str(segment)
+                    elif (datagram.SEQ - self.IRS) > self.RCV_NXT:
+                        __log__.info('RECV (OUT OF ORDER): ' + str(datagram))
+                        self.NACK_PENDING = True
 
-                    num_segments_acked = segment.ACK - self.ISS - self.SND_UNA
-                    for i in range(num_segments_acked):
-                        self.SND_BUFFER.popleft()
-                    self.SND_UNA = segment.ACK - self.ISS
-                    self.SND_WND = segment.WIN
-                    self.SND_TIMER.cancel()
-                    self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
-                    self.SND_TIMER.start()
-
-                    send_segment = self.SND_BUFFER[0]
-                    send_segment.ACK = self.IRS + self.RCV_UNA
-                    send_segment.WIN = self.RCV_WND
-                    print 'RETRANS (NACK): ', str(send_segment)
-                    self._socket.sendto(send_segment.to_data(), self.REMOTE_ADDR)
-
-                if (segment.FLAGS & Flags.FLAG_DATA) != 0:
-                    if (segment.SEQ - self.IRS) == self.RCV_NXT:
-                        self.RCV_BUFFER.append(segment)
+                    else:
+                        __log__.info('RECV: ' + str(datagram))
+                        self.RCV_BUFFER.append(datagram)
                         self.RCV_WND -= 1
-                        self.SND_WND = segment.WIN
+                        self.SND_WND = datagram.WIN
                         self.RCV_NXT += 1
                         self.ACK_PENDING = True
 
-                    elif (segment.SEQ - self.IRS) < self.RCV_NXT:
-                        print 'DUP: ', str(segment)
+                else:
+                    __log__.info('RECV: ' + str(datagram))
 
-                    else:
-                        print 'OUT OR ORDER: ', str(segment)
-                        self.NACK_PENDING = True
+                if (datagram.FLAGS & Flags.FLAG_ACK) != 0:
+                    num_datagrams_acked = datagram.ACK - self.ISS - self.SND_UNA
+                    for i in range(num_datagrams_acked):
+                        self.SND_BUFFER.popleft()
+                    self.SND_UNA = datagram.ACK - self.ISS
+                    self.SND_WND = datagram.WIN
+                    self.SND_TIMER.cancel()
+                    self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
+                    self.SND_TIMER.start()
 
+                if (datagram.FLAGS & Flags.FLAG_NACK) != 0:
+                    num_datagrams_acked = datagram.ACK - self.ISS - self.SND_UNA
+                    for i in range(num_datagrams_acked):
+                        self.SND_BUFFER.popleft()
+                    self.SND_UNA = datagram.ACK - self.ISS
+                    self.SND_WND = datagram.WIN
+                    self.SND_TIMER.cancel()
+                    self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
+                    self.SND_TIMER.start()
+
+                    send_datagram = self.SND_BUFFER[0]
+                    send_datagram.ACK = self.IRS + self.RCV_UNA
+                    send_datagram.WIN = self.RCV_WND
+                    __log__.info('SEND (trigerred by NACK): ' + str(send_datagram))
+                    self._socket.sendto(send_datagram.to_data(), self.REMOTE_ADDR)
 
         if (self.SND_RDY > self.SND_NXT) and (self.SND_WND > 0):
-            send_segment = self.SND_BUFFER[self.SND_RDY-1-self.SND_UNA]
-            send_segment.ACK = self.IRS + self.RCV_UNA
-            send_segment.WIN = self.RCV_WND
+            send_datagram = self.SND_BUFFER[self.SND_RDY-1-self.SND_UNA]
+            send_datagram.ACK = self.IRS + self.RCV_UNA
+            send_datagram.WIN = self.RCV_WND
 
-            # send delayed segment if set in the last loop
+            # send delayed datagram if set in the last loop
             if self.DELAYED_SEND is not None:
-                print 'SEND (DELAYED): ', str(self.DELAYED_SEND)
+                __log__.info('SEND (DELAYED): ' + str(self.DELAYED_SEND))
                 self._socket.sendto(self.DELAYED_SEND.to_data(), self.REMOTE_ADDR)
                 self.DELAYED_SEND = None
 
-            # set the current segment as delayed (will be sent in the next loop)
+            # set the current datagram as delayed (will be sent in the next loop)
             if random.uniform(0,1) < self.PDELAY:
-                self.DELAYED_SEND = send_segment
+                self.DELAYED_SEND = send_datagram
 
-            # send the segment twice
+            # send the datagram twice
             elif random.uniform(0,1) < self.PDUP:
-                print 'SEND (DUPLICATE): ', str(send_segment)
-                self._socket.sendto(send_segment.to_data(), self.REMOTE_ADDR)
-                self._socket.sendto(send_segment.to_data(), self.REMOTE_ADDR)
+                __log__.info('SEND (DUP): ' + str(send_datagram))
+                self._socket.sendto(send_datagram.to_data(), self.REMOTE_ADDR)
+                self._socket.sendto(send_datagram.to_data(), self.REMOTE_ADDR)
 
-            # do not send the segment
+            # do not send the datagram
             elif random.uniform(0,1) < self.PLOSS:
-                print 'SEND (LOST): ', str(send_segment)
+                __log__.info('SEND (LOST): ' + str(send_datagram))
 
             # normal send
             else:
-                print 'SEND: ', str(send_segment)
-                self._socket.sendto(send_segment.to_data(), self.REMOTE_ADDR)
+                __log__.info('SEND: ' + str(send_datagram))
+                self._socket.sendto(send_datagram.to_data(), self.REMOTE_ADDR)
 
             self.SND_NXT += 1
             self.SND_WND -= 1
@@ -365,36 +381,23 @@ class Socket(object):
 
         self.lock.release()
 
-    def push_send_buffer(self, segment):
-        self.SND_BUFFER.append(segment)
-        self.SND_RDY += 1
-
-    def pop_recv_buffer(self):
-        if self.RCV_NXT == self.RCV_UNA:
-            return None
-
-        segment = self.RCV_BUFFER.popleft()
-        self.RCV_WND += 1
-        self.RCV_UNA += 1
-        return segment
-
     def send_nack(self):
-        segment = Segment()
-        segment.SEQ = self.ISS + self.SND_RDY
-        segment.ACK = self.IRS + self.RCV_UNA
-        segment.WIN = self.RCV_WND
-        segment.FLAGS = Flags.FLAG_NACK
-        print 'SEND NACK: ', str(segment)
-        self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
+        datagram = ReliableDatagram()
+        datagram.SEQ = self.ISS + self.SND_RDY
+        datagram.ACK = self.IRS + self.RCV_UNA
+        datagram.WIN = self.RCV_WND
+        datagram.FLAGS = Flags.FLAG_NACK
+        __log__.info('SEND: ' + str(datagram))
+        self._socket.sendto(datagram.to_data(), self.REMOTE_ADDR)
 
     def send_ack(self):
-        segment = Segment()
-        segment.SEQ = self.ISS + self.SND_NXT
-        segment.ACK = self.IRS + self.RCV_UNA
-        segment.WIN = self.RCV_WND
-        segment.FLAGS = Flags.FLAG_ACK
-        print 'SEND ACK: ', str(segment)
-        self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
+        datagram = ReliableDatagram()
+        datagram.SEQ = self.ISS + self.SND_NXT
+        datagram.ACK = self.IRS + self.RCV_UNA
+        datagram.WIN = self.RCV_WND
+        datagram.FLAGS = Flags.FLAG_ACK
+        __log__.info('SEND: ' + str(datagram))
+        self._socket.sendto(datagram.to_data(), self.REMOTE_ADDR)
 
     def send_timeout(self):
         if self.STATE != State.ESTABLISHED:
@@ -403,13 +406,8 @@ class Socket(object):
         self.lock.acquire()
 
         if self.SND_NXT > self.SND_UNA:
-            print 'RETRANSMITTING...', self.SND_NXT, self.SND_UNA, self.SND_RDY, self.SND_WND
+            __log__.info('RETRANSMISSION STARTED')
             self.SND_NXT = self.SND_UNA
-            #segment = self.SND_BUFFER[0]
-            #segment.ACK = self.IRS + self.RCV_UNA
-            #segment.WIN = self.RCV_WND
-            #print 'RETRANS: ', str(segment)
-            #self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
 
         self.SND_TIMER.cancel()
         self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
@@ -464,18 +462,18 @@ class Socket(object):
                     self.ACK_PENDING = False
 
                 # send FIN
-                segment = Segment()
-                segment.SEQ = -1
-                print 'SEND FIN: ', str(segment)
-                self._socket.sendto(segment.to_data(), self.REMOTE_ADDR)
+                datagram = ReliableDatagram()
+                datagram.SEQ = -1
+                __log__.info('SEND: ' + str(datagram))
+                self._socket.sendto(datagram.to_data(), self.REMOTE_ADDR)
 
                 # wait for an FIN ACK
                 while True:
                     data, addr = self._recvfrom_wrapper(1024)
-                    segment = Segment.from_data(data)
+                    datagram = ReliableDatagram.from_data(data)
 
-                    if (segment.SEQ) == -1:
-                        print 'RECEIVE FIN ACK: ', str(segment)
+                    if (datagram.SEQ) == -1:
+                        __log__.info('RECV: ' + str(datagram))
                         break
 
             # stop timers (if not stopped already)
@@ -488,7 +486,7 @@ class Socket(object):
 
         self.lock.release()
 
-class Segment(object):
+class ReliableDatagram(object):
     def __init__(self):
         self.SEQ = 0
         self.ACK = 0
@@ -498,20 +496,30 @@ class Segment(object):
         self.PAYLOAD = ''
 
     def __str__(self):
-        return "(SEQ=%d ACK=%d FLAGS=%d WIN=%d '%s')" % (self.SEQ, self.ACK, self.FLAGS, self.WIN, self.PAYLOAD)
+        def flags():
+            flags = []
+            if (self.FLAGS & Flags.FLAG_ACK) != 0:  flags.append('ACK')
+            if (self.FLAGS & Flags.FLAG_SYN) != 0:  flags.append('SYN')
+            if (self.FLAGS & Flags.FLAG_NACK) != 0: flags.append('NACK')
+            if (self.FLAGS & Flags.FLAG_DATA) != 0: flags.append('DATA')
+            if self.SEQ == -1:  flags.append('FIN')
+            return '|'.join(flags)
+
+        return "(FLAGS=%s  SEQ=%d  ACK=%d  WIN=%d  PAYLOAD='%s')" % \
+            (flags(), self.SEQ, self.ACK, self.WIN, self.PAYLOAD)
 
     @staticmethod
     def from_data(data):
-        segment = Segment()
+        dgram = ReliableDatagram()
 
-        segment.SEQ, segment.ACK, segment.FLAGS, segment.WIN, \
-                segment.CHECKSUM = struct.unpack('!iiHHH', data[0:14])
-        segment.PAYLOAD = data[14:]
+        dgram.SEQ, dgram.ACK, dgram.FLAGS, dgram.WIN, \
+                dgram.CHECKSUM = struct.unpack('!iiHHH', data[0:14])
+        dgram.PAYLOAD = data[14:]
 
-        if segment.calculate_checksum(data[0:14]) != 0:
-            raise ChecksumError('segment header: 0x' + data[0:14].encode('hex'))
+        if dgram.calculate_checksum(data[0:14]) != 0:
+            raise ChecksumError('dgram header: 0x' + data[0:14].encode('hex'))
 
-        return segment
+        return dgram
 
     def to_data(self):
         header = struct.pack('!iiHH', self.SEQ, self.ACK, self.FLAGS, self.WIN)
