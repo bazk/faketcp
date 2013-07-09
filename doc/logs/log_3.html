@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>Trabalho Prático de Redes de Computadores II</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Implementação de uma aplicação confiável sobre UDP">
+    <meta name="author" content="Daniel Gomes, Eduardo Buratti">
+
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
+    <link href="../css/bootstrap-responsive.min.css" rel="stylesheet">
+    <link href="../css/main.css" rel="stylesheet">
+  </head>
+
+  <body>
+
+    <div class="container">
+
+      <div class="masthead">
+        <h2 class="muted">Trabalho Prático de Redes de Computadores II</h2>
+        <h6 class="muted">
+          <strong>Autores: </strong> Daniel Gomes (<a href="mailto:dgpg09@c3sl.ufpr.br">dgpg09@c3sl.ufpr.br</a>)
+          e Eduardo Buratti (<a href="mailto:elb09@c3sl.ufpr.br">elb09@c3sl.ufpr.br</a>)
+        </h6>
+        <div class="navbar">
+          <div class="navbar-inner">
+            <div class="container">
+              <ul class="nav">
+                <li><a href="../index.html">Relatório</a></li>
+                <li><a href="../source.html">Código Fonte</a></li>
+                <li class="active"><a href="../logs.html">Logs</a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row-fluid">
+        <div class="span12">
+          <p>
+            Este teste simula a desordenação dos datagramas.
+          </p>
+          <p>
+            A transmissão ocorre normalmente até que um segmento é atrasado (linha 11 do cliente) e o datagrama imediatamente anterior a ele chega antes no servidor (linha 12 do servidor).
+            O servidor, percebendo que o datagrama está fora de ordem, envia um NACK (linha 13 do servidor) ocasionando a retransmissão no cliente (linha 16 do cliente).
+          </p>
+          <p>
+            Aqui acontece o mesmo problema do primeiro teste ("Perda de datagramas") onde vários NACKs são transmitidos e várias retransmissões são iniciadas.
+            Depois de algumas retransmissões a situação se estabiliza e retorna ao normal.
+          </p>
+          <p>
+            Mais alguns datagramas são atrasados e resultam em retransmissões até o fim da conexão.
+          </p>
+        </div>
+      </div>
+
+      <hr>
+
+      <div class="row-fluid">
+        <div class="span12">
+          <h4>Cliente</h4>
+          <pre class="prettyprint linenums">Connecting to  ('localhost', 50007) ...
+[ 0.00224614 ] [INFO] SEND: (FLAGS=SYN  SEQ=11574  ACK=0  WIN=16  PAYLOAD='')
+[ 0.00418997 ] [INFO] RECV: (FLAGS=ACK|SYN  SEQ=63009  ACK=11575  WIN=16  PAYLOAD='')
+[ 0.00433207 ] [INFO] SEND: (FLAGS=ACK  SEQ=11575  ACK=63010  WIN=16  PAYLOAD='')
+Connection estabilished.
+[ 0.00481296 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=11575  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 0')
+[ 0.00560403 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=11576  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 1')
+[ 0.00625896 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=11577  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 2')
+[ 0.00709701 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=11578  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 3')
+[ 0.00810909 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=11579  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 4')
+[ 0.00881696 ] [INFO] SEND (DELAYED): (FLAGS=ACK|DATA  SEQ=11580  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 5')
+[ 0.00965405 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=11581  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 6')
+[ 0.01092196 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=11582  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 7')
+[ 0.01176405 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=11583  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 8')
+[ 0.01268911 ] [INFO] RECV: (FLAGS=NACK  SEQ=63010  ACK=11580  WIN=16  PAYLOAD='')
+[ 0.01361108 ] [INFO] RETRANSMISSION STARTED (triggered by NACK)
+[ 0.01394796 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=11580  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 5')
+[ 0.01499295 ] [INFO] RECV: (FLAGS=NACK  SEQ=63010  ACK=11581  WIN=16  PAYLOAD='')
+[ 0.01568699 ] [INFO] SEND (DELAYED): (FLAGS=ACK|DATA  SEQ=11581  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 6')
+[ 0.01648402 ] [INFO] RECV: (FLAGS=NACK  SEQ=63010  ACK=11581  WIN=16  PAYLOAD='')
+[ 0.01719999 ] [INFO] RETRANSMISSION STARTED (triggered by NACK)
+[ 0.01749611 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=11581  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 6')
+[ 0.01822805 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=11582  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 7')
+[ 0.01887012 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=11583  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 8')
+[ 0.01970315 ] [INFO] SEND (DELAYED): (FLAGS=ACK|DATA  SEQ=11584  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 9')
+[ 0.02547312 ] [INFO] RECV: (FLAGS=ACK  SEQ=63010  ACK=11584  WIN=16  PAYLOAD='')
+[ 0.42627406 ] [INFO] RETRANSMISSION STARTED (triggered by SND_TIMEOUT)
+[ 0.42704797 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=11584  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 9')
+[ 0.43835807 ] [INFO] RECV: (FLAGS=ACK  SEQ=63010  ACK=11585  WIN=16  PAYLOAD='')
+[ 0.43880105 ] [INFO] SEND: (FLAGS=FIN  SEQ=-1  ACK=0  WIN=0  PAYLOAD='')
+[ 0.43928313 ] [INFO] RECV: (FLAGS=ACK|FIN  SEQ=-1  ACK=0  WIN=0  PAYLOAD='')</pre>
+        </div>
+      </div>
+
+      <hr>
+
+      <div class="row-fluid">
+        <div class="span12">
+          <h4>Servidor</h4>
+          <pre class="prettyprint linenums lang-python">Listening for new connection on   : 50007 ...
+[ 0.94071102 ] [INFO] RECV: (FLAGS=SYN  SEQ=11574  ACK=0  WIN=16  PAYLOAD='')
+[ 0.94134092 ] [INFO] SOCKET(STATE=CLOSED, SND_NXT=0, SND_UNA=0, SND_RDY=0, SND_WND=0, ISS=63009, RCV_NXT=0, RCV_UNA=0, RCV_WND=16, IRS=0)
+[ 0.94153595 ] [INFO] SEND: (FLAGS=ACK|SYN  SEQ=63009  ACK=11575  WIN=16  PAYLOAD='')
+[ 0.94227099 ] [INFO] RECV: (FLAGS=ACK  SEQ=11575  ACK=63010  WIN=16  PAYLOAD='')
+Connection estabilished ( ('127.0.0.1', 40249) ).
+[ 0.94281507 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=11575  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 0')
+[ 0.94356704 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=11576  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 1')
+[ 0.94442010 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=11577  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 2')
+[ 0.94509101 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=11578  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 3')
+[ 0.94921708 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=11579  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 4')
+[ 0.94960189 ] [INFO] RECV (OUT OF ORDER): (FLAGS=ACK|DATA  SEQ=11581  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 6')
+[ 0.94968796 ] [INFO] SEND: (FLAGS=NACK  SEQ=63010  ACK=11580  WIN=16  PAYLOAD='')
+[ 0.95004106 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=11580  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 5')
+[ 0.95059299 ] [INFO] RECV (OUT OF ORDER): (FLAGS=ACK|DATA  SEQ=11582  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 7')
+[ 0.95087504 ] [INFO] SEND: (FLAGS=NACK  SEQ=63010  ACK=11581  WIN=16  PAYLOAD='')
+[ 0.95141196 ] [INFO] RECV (OUT OF ORDER): (FLAGS=ACK|DATA  SEQ=11583  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 8')
+[ 0.95154309 ] [INFO] SEND: (FLAGS=NACK  SEQ=63010  ACK=11581  WIN=16  PAYLOAD='')
+[ 0.95246410 ] [INFO] RECV (DUPLICATED): (FLAGS=ACK|DATA  SEQ=11580  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 5')
+[ 0.95566010 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=11581  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 6')
+[ 0.95644498 ] [INFO] RECV (DUPLICATED): (FLAGS=ACK|DATA  SEQ=11581  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 6')
+[ 0.95724607 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=11582  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 7')
+[ 0.95785308 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=11583  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 8')
+[ 0.96289706 ] [INFO] SEND: (FLAGS=ACK  SEQ=63010  ACK=11584  WIN=16  PAYLOAD='')
+[ 1.36522007 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=11584  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 9')
+[ 1.36595511 ] [INFO] RECV (DUPLICATED): (FLAGS=ACK|DATA  SEQ=11584  ACK=63010  WIN=16  PAYLOAD='this is the datagram number 9')
+[ 1.37583208 ] [INFO] SEND: (FLAGS=ACK  SEQ=63010  ACK=11585  WIN=16  PAYLOAD='')
+[ 1.37680101 ] [INFO] RECV: (FLAGS=FIN  SEQ=-1  ACK=0  WIN=0  PAYLOAD='')
+Listening for new connection on   : 50007 ...</pre>
+        </div>
+      </div>
+
+      <hr>
+
+    </div>
+
+    <script src="../js/jquery.min.js"></script>
+    <script src="../js/bootstrap.min.js"></script>
+    <script src="https://google-code-prettify.googlecode.com/svn/loader/run_prettify.js?skin=desert"></script>
+  </body>
+</html>
