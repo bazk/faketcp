@@ -79,7 +79,8 @@ class Socket(object):
         self.SND_RDY = 0
         self.SND_WND = 0
         self.SND_TIMEOUT = 0.4
-        self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
+        self.SND_TIMER = None
+        self.SND_TIMER_RUNNING = False
         self.ISS = random.randint(0, 65535) # initial send sequence number
 
         self.RCV_NXT = 0
@@ -89,7 +90,8 @@ class Socket(object):
 
         self.ACK_PENDING = False
         self.ACK_TIMEOUT = 0.02
-        self.ACK_TIMER = threading.Timer(self.ACK_TIMEOUT, self.ack_timeout)
+        self.ACK_TIMER = None
+        self.ACK_TIMER_RUNNING = False
 
         self.PLOSS = ploss
         self.PDUP = pdup
@@ -184,9 +186,6 @@ class Socket(object):
         # set the socket state as ESTABLISHED
         self.STATE = State.ESTABLISHED
 
-        # start ACK timer (to send ACKS each 'ACK_TIMEOUT' interval)
-        self.ACK_TIMER.start()
-
     def listen(self):
         """ Put the socket in LISTEN state. """
 
@@ -266,9 +265,6 @@ class Socket(object):
 
         # set the socket state as ESTABLISHED
         conn.STATE = State.ESTABLISHED
-
-        # start ACK timer
-        conn.ACK_TIMER.start()
 
         # return the new socket
         return (conn, conn.REMOTE_ADDR)
@@ -405,6 +401,12 @@ class Socket(object):
                         self.RCV_NXT += 1
                         self.ACK_PENDING = True
 
+                        # start ACK_TIMER because whe have ACKs to send
+                        if not self.ACK_TIMER_RUNNING:
+                            self.ACK_TIMER = threading.Timer(self.ACK_TIMEOUT, self.ack_timeout)
+                            self.ACK_TIMER.start()
+                            self.ACK_TIMER_RUNNING = True
+
                 # if datagram has no data, just log it
                 else:
                     __log__.info('RECV: ' + str(datagram))
@@ -421,9 +423,10 @@ class Socket(object):
                     self.SND_WND = datagram.WIN
 
                     # reset retransmission timer
-                    self.SND_TIMER.cancel()
-                    self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
-                    self.SND_TIMER.start()
+                    if self.SND_TIMER_RUNNING:
+                        self.SND_TIMER.cancel()
+                        self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
+                        self.SND_TIMER.start()
 
                 if (datagram.FLAGS & Flags.FLAG_NACK) != 0:
                     # NOTE: when a NACK is received, the ACK information is
@@ -439,9 +442,10 @@ class Socket(object):
                     self.SND_WND = datagram.WIN
 
                     # reset retransmission timer
-                    self.SND_TIMER.cancel()
-                    self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
-                    self.SND_TIMER.start()
+                    if self.SND_TIMER_RUNNING:
+                        self.SND_TIMER.cancel()
+                        self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
+                        self.SND_TIMER.start()
 
                     if self.SND_NXT > self.SND_UNA:
                         __log__.info('RETRANSMISSION STARTED (triggered by NACK)')
@@ -491,10 +495,16 @@ class Socket(object):
             self.SND_NXT += 1
             self.SND_WND -= 1
 
+            if not self.SND_TIMER_RUNNING:
+                self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
+                self.SND_TIMER.start()
+                self.SND_TIMER_RUNNING = True
+
             # reset ACK timer (since ACK is piggybacked in every DATA datagram)
-            self.ACK_TIMER.cancel()
-            self.ACK_TIMER = threading.Timer(self.ACK_TIMEOUT, self.ack_timeout)
-            self.ACK_TIMER.start()
+            if self.ACK_TIMER_RUNNING:
+                self.ACK_TIMER.cancel()
+                self.ACK_TIMER = threading.Timer(self.ACK_TIMEOUT, self.ack_timeout)
+                self.ACK_TIMER.start()
 
         self.lock.release()
 
@@ -586,8 +596,12 @@ class Socket(object):
                     self.lock.acquire()
 
                 # stop timers
-                self.SND_TIMER.cancel()
-                self.ACK_TIMER.cancel()
+                if self.SND_TIMER_RUNNING:
+                    self.SND_TIMER_RUNNING = False
+                    self.SND_TIMER.cancel()
+                if self.ACK_TIMER_RUNNING:
+                    self.ACK_TIMER_RUNNING = False
+                    self.ACK_TIMER.cancel()
 
                 # send pending ack
                 if self.ACK_PENDING:
@@ -610,8 +624,12 @@ class Socket(object):
                         break
 
             # stop timers (if not stopped already)
-            self.SND_TIMER.cancel()
-            self.ACK_TIMER.cancel()
+            if self.SND_TIMER_RUNNING:
+                self.SND_TIMER_RUNNING = False
+                self.SND_TIMER.cancel()
+            if self.ACK_TIMER_RUNNING:
+                self.ACK_TIMER_RUNNING = False
+                self.ACK_TIMER.cancel()
 
         # close the socket
         self.STATE = State.CLOSED

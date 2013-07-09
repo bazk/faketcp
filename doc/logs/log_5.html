@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>Trabalho Prático de Redes de Computadores II</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Implementação de uma aplicação confiável sobre UDP">
+    <meta name="author" content="Daniel Gomes, Eduardo Buratti">
+
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
+    <link href="../css/bootstrap-responsive.min.css" rel="stylesheet">
+    <link href="../css/main.css" rel="stylesheet">
+  </head>
+
+  <body>
+
+    <div class="container">
+
+      <div class="masthead">
+        <h2 class="muted">Trabalho Prático de Redes de Computadores II</h2>
+        <h6 class="muted">
+          <strong>Autores: </strong> Daniel Gomes (<a href="mailto:dgpg09@c3sl.ufpr.br">dgpg09@c3sl.ufpr.br</a>)
+          e Eduardo Buratti (<a href="mailto:elb09@c3sl.ufpr.br">elb09@c3sl.ufpr.br</a>)
+        </h6>
+        <div class="navbar">
+          <div class="navbar-inner">
+            <div class="container">
+              <ul class="nav">
+                <li><a href="../index.html">Relatório</a></li>
+                <li><a href="../source.html">Código Fonte</a></li>
+                <li class="active"><a href="../logs.html">Logs</a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row-fluid">
+        <div class="span12">
+          <p>
+            Neste testes dois clientes são executados ao mesmo tempo. Porém como o servidor é iterativo, cada cliente
+            é atendido sequencialmente, ou seja, o servidor só estabelece a conexão com o cliente 2 depois do
+            fim da conexão com o cliente 1.
+          </p>
+          <p>
+            A segunda coluna de cada linha de log contém o PID do processo que executou a
+            operação (SEND ou RECV). Observe que o servidor processa ambos os clientes utilizando o mesmo processo.
+          </p>
+        </div>
+      </div>
+
+      <hr>
+
+      <div class="row-fluid">
+        <div class="span12">
+          <h4>Cliente 1</h4>
+          <pre class="prettyprint linenums">Connecting to  ('localhost', 50007) ...
+[ 0.00432205 ] [ 2557 ] [INFO] SEND: (FLAGS=SYN  SEQ=10232  ACK=0  WIN=16  PAYLOAD='')
+[ 0.00608492 ] [ 2557 ] [INFO] RECV: (FLAGS=ACK|SYN  SEQ=24164  ACK=10233  WIN=16  PAYLOAD='')
+[ 0.00630403 ] [ 2557 ] [INFO] SEND: (FLAGS=ACK  SEQ=10233  ACK=24165  WIN=16  PAYLOAD='')
+Connection estabilished.
+[ 0.00661612 ] [ 2557 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=10233  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 0')
+[ 0.00813293 ] [ 2557 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=10234  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 1')
+[ 0.00854897 ] [ 2557 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=10235  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 2')
+[ 0.00884414 ] [ 2557 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=10236  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 3')
+[ 0.00909400 ] [ 2557 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=10237  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 4')
+[ 0.00962210 ] [ 2557 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=10238  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 5')
+[ 0.00999808 ] [ 2557 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=10239  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 6')
+[ 0.01023793 ] [ 2557 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=10240  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 7')
+[ 0.01046109 ] [ 2557 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=10241  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 8')
+[ 0.01068306 ] [ 2557 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=10242  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 9')
+[ 0.02862716 ] [ 2557 ] [INFO] RECV: (FLAGS=ACK  SEQ=24165  ACK=10243  WIN=16  PAYLOAD='')
+[ 0.02985406 ] [ 2557 ] [INFO] SEND: (FLAGS=FIN  SEQ=-1  ACK=0  WIN=0  PAYLOAD='')
+[ 0.03117609 ] [ 2557 ] [INFO] RECV: (FLAGS=ACK|FIN  SEQ=-1  ACK=0  WIN=0  PAYLOAD='')</pre>
+        </div>
+      </div>
+
+      <hr>
+
+      <div class="row-fluid">
+        <div class="span12">
+          <h4>Cliente 2</h4>
+          <pre class="prettyprint linenums">Connecting to  ('localhost', 50007) ...
+[ 0.00433898 ] [ 2556 ] [INFO] SEND: (FLAGS=SYN  SEQ=7226  ACK=0  WIN=16  PAYLOAD='')
+[ 0.03220606 ] [ 2556 ] [INFO] RECV: (FLAGS=ACK|SYN  SEQ=61816  ACK=7227  WIN=16  PAYLOAD='')
+[ 0.03245211 ] [ 2556 ] [INFO] SEND: (FLAGS=ACK  SEQ=7227  ACK=61817  WIN=16  PAYLOAD='')
+Connection estabilished.
+[ 0.03280902 ] [ 2556 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=7227  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 0')
+[ 0.03403592 ] [ 2556 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=7228  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 1')
+[ 0.03442788 ] [ 2556 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=7229  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 2')
+[ 0.03483796 ] [ 2556 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=7230  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 3')
+[ 0.03521395 ] [ 2556 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=7231  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 4')
+[ 0.03546500 ] [ 2556 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=7232  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 5')
+[ 0.03585005 ] [ 2556 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=7233  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 6')
+[ 0.03624511 ] [ 2556 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=7234  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 7')
+[ 0.03667593 ] [ 2556 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=7235  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 8')
+[ 0.03699994 ] [ 2556 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=7236  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 9')
+[ 0.05548406 ] [ 2556 ] [INFO] RECV: (FLAGS=ACK  SEQ=61817  ACK=7237  WIN=16  PAYLOAD='')
+[ 0.05654001 ] [ 2556 ] [INFO] SEND: (FLAGS=FIN  SEQ=-1  ACK=0  WIN=0  PAYLOAD='')
+[ 0.05781603 ] [ 2556 ] [INFO] RECV: (FLAGS=ACK|FIN  SEQ=-1  ACK=0  WIN=0  PAYLOAD='')</pre>
+        </div>
+      </div>
+
+      <hr>
+
+      <div class="row-fluid">
+        <div class="span12">
+          <h4>Servidor</h4>
+          <pre class="prettyprint linenums lang-python">Listening for new connection on   : 50007 ...
+[ 28.75895500 ] [ 2471 ] [INFO] RECV: (FLAGS=SYN  SEQ=10232  ACK=0  WIN=16  PAYLOAD='')
+[ 28.75945401 ] [ 2471 ] [INFO] SEND: (FLAGS=ACK|SYN  SEQ=24164  ACK=10233  WIN=16  PAYLOAD='')
+[ 28.76046991 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK  SEQ=10233  ACK=24165  WIN=16  PAYLOAD='')
+Connection estabilished ( ('127.0.0.1', 44663) ).
+[ 28.76097298 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=10233  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 0')
+[ 28.76244497 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=10234  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 1')
+[ 28.76306605 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=10235  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 2')
+[ 28.76343489 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=10236  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 3')
+[ 28.76378989 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=10237  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 4')
+[ 28.76414084 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=10238  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 5')
+[ 28.76448894 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=10239  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 6')
+[ 28.76483297 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=10240  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 7')
+[ 28.76531887 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=10241  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 8')
+[ 28.76568198 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=10242  ACK=24165  WIN=16  PAYLOAD='this is the datagram number 9')
+[ 28.78193402 ] [ 2471 ] [INFO] SEND: (FLAGS=ACK  SEQ=24165  ACK=10243  WIN=16  PAYLOAD='')
+[ 28.78430104 ] [ 2471 ] [INFO] RECV: (FLAGS=FIN  SEQ=-1  ACK=0  WIN=0  PAYLOAD='')
+Listening for new connection on   : 50007 ...
+[ 28.78504205 ] [ 2471 ] [INFO] RECV: (FLAGS=SYN  SEQ=7226  ACK=0  WIN=16  PAYLOAD='')
+[ 28.78568006 ] [ 2471 ] [INFO] SEND: (FLAGS=ACK|SYN  SEQ=61816  ACK=7227  WIN=16  PAYLOAD='')
+[ 28.78733587 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK  SEQ=7227  ACK=61817  WIN=16  PAYLOAD='')
+Connection estabilished ( ('127.0.0.1', 46819) ).
+[ 28.78813291 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=7227  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 0')
+[ 28.78947783 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=7228  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 1')
+[ 28.79014492 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=7229  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 2')
+[ 28.79068899 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=7230  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 3')
+[ 28.79115605 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=7231  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 4')
+[ 28.79160094 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=7232  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 5')
+[ 28.79205585 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=7233  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 6')
+[ 28.79256105 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=7234  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 7')
+[ 28.79306388 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=7235  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 8')
+[ 28.79352999 ] [ 2471 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=7236  ACK=61817  WIN=16  PAYLOAD='this is the datagram number 9')
+[ 28.80935192 ] [ 2471 ] [INFO] SEND: (FLAGS=ACK  SEQ=61817  ACK=7237  WIN=16  PAYLOAD='')
+[ 28.81139898 ] [ 2471 ] [INFO] RECV: (FLAGS=FIN  SEQ=-1  ACK=0  WIN=0  PAYLOAD='')
+Listening for new connection on   : 50007 ...</pre>
+        </div>
+      </div>
+
+      <hr>
+
+    </div>
+
+    <script src="../js/jquery.min.js"></script>
+    <script src="../js/bootstrap.min.js"></script>
+    <script src="https://google-code-prettify.googlecode.com/svn/loader/run_prettify.js?skin=desert"></script>
+  </body>
+</html>
