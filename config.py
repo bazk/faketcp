@@ -1,8 +1,15 @@
+import logging
+import time
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': True,
     'formatters': {
         'verbose': {
+            'format': '[ %(asctime)s ] [%(levelname)s] %(message)s'
+        },
+        'test': {
+            '()': 'config.MyFormatter',
             'format': '[ %(asctime)s ] [%(levelname)s] %(message)s'
         },
         'simple': {
@@ -17,7 +24,7 @@ LOGGING = {
         'console':{
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
-            'formatter': 'verbose'
+            'formatter': 'test'
         }
     },
     'loggers': {
@@ -27,3 +34,9 @@ LOGGING = {
         }
     }
 }
+
+class MyFormatter(logging.Formatter):
+    beginning = time.time()
+
+    def formatTime(self, record, datefmt=None):
+        return '%.8f' % (record.created - self.beginning)
