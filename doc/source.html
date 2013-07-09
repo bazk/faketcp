@@ -10,7 +10,6 @@
 
     <link href="css/bootstrap.min.css" rel="stylesheet">
     <link href="css/bootstrap-responsive.min.css" rel="stylesheet">
-    <link href="css/highlight-js/monokai.css" rel="stylesheet">
     <link href="css/main.css" rel="stylesheet">
   </head>
 
@@ -59,8 +58,7 @@
 
         <div class="tab-content">
           <div class="tab-pane" id="server">
-            <pre>
-              <code>import argparse
+            <pre class="prettyprint lang-python">import argparse
 import rdp
 import logging.config
 import config
@@ -98,13 +96,10 @@ if __name__=="__main__":
                 break
 
     # close the listening socket
-    socket.close()
-              </code>
-            </pre>
+    socket.close()</pre>
           </div>
           <div class="tab-pane" id="client">
-            <pre>
-              <code>import argparse
+            <pre class="prettyprint lang-python">import argparse
 import rdp
 import logging.config
 import config
@@ -135,13 +130,10 @@ if __name__=="__main__":
         socket.send('this is the datagram number %d' % i)
 
     # close connection
-    socket.close()
-              </code>
-            </pre>
+    socket.close()</pre>
           </div>
           <div class="tab-pane" id="rdp">
-            <pre>
-              <code>import socket
+            <pre class="prettyprint lang-python">import socket
 import struct
 import random
 import threading
@@ -804,13 +796,10 @@ class ReliableDatagram(object):
         for word in struct.unpack('!' + 'H' * (len(data) / 2), data):
             checksum = carry_around_add(checksum, word)
 
-        return (checksum ^ 0xffff)
-              </code>
-            </pre>
+        return (checksum ^ 0xffff)</pre>
           </div>
           <div class="tab-pane" id="config">
-            <pre>
-              <code>LOGGING = {
+            <pre class="prettyprint lang-python">LOGGING = {
     'version': 1,
     'disable_existing_loggers': True,
     'formatters': {
@@ -838,9 +827,7 @@ class ReliableDatagram(object):
             'level': 'INFO'
         }
     }
-}
-              </code>
-            </pre>
+}</pre>
           </div>
         </div>
       </div>
@@ -851,8 +838,7 @@ class ReliableDatagram(object):
 
     <script src="js/jquery.min.js"></script>
     <script src="js/bootstrap.min.js"></script>
-    <script src="js/highlight.pack.js"></script>
-    <script>hljs.initHighlightingOnLoad();</script>
+    <script src="https://google-code-prettify.googlecode.com/svn/loader/run_prettify.js?lang=python&skin=desert"></script>
     <script type="text/javascript">
       $(function () {
         $('#file-nav tr').click(function (e) {

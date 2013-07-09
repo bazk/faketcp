@@ -41,13 +41,15 @@ body {
   border-radius: 0 3px 3px 0;
 }
 
-pre {
-  padding: 0px;
-  margin 0px;
-  background: transparent;
-  border: 0px;
-}
-
 table tr.active {
   background-color: red
+}
+
+li.L0, li.L1, li.L2, li.L3,
+li.L5, li.L6, li.L7, li.L8 {
+  list-style-type: decimal !important;
+}
+
+ol.linenums {
+  margin-left: 0px;
 }

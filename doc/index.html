@@ -11,7 +11,6 @@
 
     <link href="css/bootstrap.min.css" rel="stylesheet">
     <link href="css/bootstrap-responsive.min.css" rel="stylesheet">
-    <link href="css/highlight-js/monokai.css" rel="stylesheet">
     <link href="css/main.css" rel="stylesheet">
   </head>
 
@@ -135,11 +134,14 @@
             Ambos, servidor e cliente, podem ser executados com os seguintes
             parâmetros:
             <ul>
-              <li><em>--ploss</em>: define o percentual (de 0 à 1) de datagramas perdidos;</li>
-              <li><em>--pdup</em>: define o percentual (de 0 à 1) de datagramas duplicados;</li>
-              <li><em>--pdelay</em>: define o percentual (de 0 à 1) de datagramas atrasados (causa datagramas fora de ordem).</li>
+              <li>"<em>--ploss X</em>": define a probabilidade (entre 0 e 1) de qualquer datagrama ser perdido durante a transmissão;</li>
+              <li>"<em>--pdup Y</em>": define a probabilidade (entre 0 e 1) de qualquer datagrama ser duplicado;</li>
+              <li>"<em>--pdelay Z</em>": define a probabilidade (entre 0 e 1) de qualquer datagrama ser atrasado (ocasionando datagramas fora de ordem).</li>
             </ul>
             Assim é possível simular situações de interferências na rede durante a transmissão.
+          </p>
+          <p>
+            Além disso, o cliente implementa um parâmetro adicional: "--num N", onde N é o número de datagramas a ser enviado antes de terminar a conexão.
           </p>
           <p>
             Os testes foram executados com diversos parâmetros de entrada e seus resultados podem ser vistos em <a href="logs.html">logs</a>.
@@ -153,7 +155,6 @@
 
     <script src="js/jquery.min.js"></script>
     <script src="js/bootstrap.min.js"></script>
-    <script src="js/highlight.pack.js"></script>
-    <script>hljs.initHighlightingOnLoad();</script>
+    <script src="https://google-code-prettify.googlecode.com/svn/loader/run_prettify.js?lang=python&skin=desert"></script>
   </body>
 </html>

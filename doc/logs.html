@@ -10,7 +10,6 @@
 
     <link href="css/bootstrap.min.css" rel="stylesheet">
     <link href="css/bootstrap-responsive.min.css" rel="stylesheet">
-    <link href="css/highlight-js/monokai.css" rel="stylesheet">
     <link href="css/main.css" rel="stylesheet">
   </head>
 
@@ -38,7 +37,40 @@
       </div>
 
       <div class="row-fluid">
-        <h2>Logs</h2>
+        <div class="span8 offset2">
+          <table class="table table-striped">
+            <thead>
+              <th>Teste</th>
+              <th style="width: 64px;">NUM</th>
+              <th style="width: 64px;">PLOSS</th>
+              <th style="width: 64px;">PDUP</th>
+              <th style="width: 64px;">PDELAY</th>
+            </thead>
+            <tbody>
+              <tr>
+                <td><a href="logs/log_1.html">Perda de datagramas</a></td>
+                <td>10</td>
+                <td>0.2</td>
+                <td>-</td>
+                <td>-</td>
+              </tr>
+              <tr>
+                <td><a href="logs/log_2.html">Duplicação de datagramas</a></td>
+                <td>10</td>
+                <td>-</td>
+                <td>0.2</td>
+                <td>-</td>
+              </tr>
+              <tr>
+                <td><a href="logs/log_3.html">Datagramas fora de ordem</a></td>
+                <td>10</td>
+                <td>-</td>
+                <td>-</td>
+                <td>0.2</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <hr>
@@ -47,7 +79,6 @@
 
     <script src="js/jquery.min.js"></script>
     <script src="js/bootstrap.min.js"></script>
-    <script src="js/highlight.pack.js"></script>
-    <script>hljs.initHighlightingOnLoad();</script>
+    <script src="https://google-code-prettify.googlecode.com/svn/loader/run_prettify.js?lang=python&skin=desert"></script>
   </body>
 </html>
