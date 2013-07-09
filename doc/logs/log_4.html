@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>Trabalho Prático de Redes de Computadores II</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Implementação de uma aplicação confiável sobre UDP">
+    <meta name="author" content="Daniel Gomes, Eduardo Buratti">
+
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
+    <link href="../css/bootstrap-responsive.min.css" rel="stylesheet">
+    <link href="../css/main.css" rel="stylesheet">
+  </head>
+
+  <body>
+
+    <div class="container">
+
+      <div class="masthead">
+        <h2 class="muted">Trabalho Prático de Redes de Computadores II</h2>
+        <h6 class="muted">
+          <strong>Autores: </strong> Daniel Gomes (<a href="mailto:dgpg09@c3sl.ufpr.br">dgpg09@c3sl.ufpr.br</a>)
+          e Eduardo Buratti (<a href="mailto:elb09@c3sl.ufpr.br">elb09@c3sl.ufpr.br</a>)
+        </h6>
+        <div class="navbar">
+          <div class="navbar-inner">
+            <div class="container">
+              <ul class="nav">
+                <li><a href="../index.html">Relatório</a></li>
+                <li><a href="../source.html">Código Fonte</a></li>
+                <li class="active"><a href="../logs.html">Logs</a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row-fluid">
+        <div class="span12">
+          <p>
+            Este teste simula a união de todos os problemas analisados (perda, duplicação, atraso).
+          </p>
+        </div>
+      </div>
+
+      <hr>
+
+      <div class="row-fluid">
+        <div class="span12">
+          <h4>Cliente</h4>
+          <pre class="prettyprint linenums">Connecting to  ('localhost', 50007) ...
+[ 0.00233102 ] [INFO] SEND: (FLAGS=SYN  SEQ=29969  ACK=0  WIN=16  PAYLOAD='')
+[ 0.00362992 ] [INFO] RECV: (FLAGS=ACK|SYN  SEQ=43657  ACK=29970  WIN=16  PAYLOAD='')
+[ 0.00373197 ] [INFO] SEND: (FLAGS=ACK  SEQ=29970  ACK=43658  WIN=16  PAYLOAD='')
+Connection estabilished.
+[ 0.00421405 ] [INFO] SEND (LOST): (FLAGS=ACK|DATA  SEQ=29970  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 0')
+[ 0.00460005 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=29971  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 1')
+[ 0.00498104 ] [INFO] RECV: (FLAGS=NACK  SEQ=43658  ACK=29970  WIN=16  PAYLOAD='')
+[ 0.00535893 ] [INFO] RETRANSMISSION STARTED (triggered by NACK)
+[ 0.00546312 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=29970  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 0')
+[ 0.00587702 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=29971  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 1')
+[ 0.00653195 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=29972  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 2')
+[ 0.00684309 ] [INFO] SEND (DELAYED): (FLAGS=ACK|DATA  SEQ=29973  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 3')
+[ 0.00735807 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=29974  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 4')
+[ 0.00783396 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=29975  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 5')
+[ 0.00828004 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=29976  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 6')
+[ 0.00909591 ] [INFO] RECV: (FLAGS=NACK  SEQ=43658  ACK=29973  WIN=16  PAYLOAD='')
+[ 0.00935602 ] [INFO] RETRANSMISSION STARTED (triggered by NACK)
+[ 0.00949812 ] [INFO] SEND (DELAYED): (FLAGS=ACK|DATA  SEQ=29973  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 3')
+[ 0.00993609 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=29974  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 4')
+[ 0.01048112 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=29975  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 5')
+[ 0.01084805 ] [INFO] SEND (DELAYED): (FLAGS=ACK|DATA  SEQ=29976  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 6')
+[ 0.01135492 ] [INFO] RECV: (FLAGS=NACK  SEQ=43658  ACK=29974  WIN=16  PAYLOAD='')
+[ 0.01179194 ] [INFO] RETRANSMISSION STARTED (triggered by NACK)
+[ 0.01188111 ] [INFO] SEND (DUP): (FLAGS=ACK|DATA  SEQ=29974  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 4')
+[ 0.01282406 ] [INFO] RECV: (FLAGS=NACK  SEQ=43658  ACK=29974  WIN=16  PAYLOAD='')
+[ 0.01384592 ] [INFO] RETRANSMISSION STARTED (triggered by NACK)
+[ 0.01408195 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=29974  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 4')
+[ 0.01480198 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=29975  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 5')
+[ 0.01549411 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=29976  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 6')
+[ 0.01668596 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=29977  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 7')
+[ 0.01755095 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=29978  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 8')
+[ 0.01856589 ] [INFO] SEND: (FLAGS=ACK|DATA  SEQ=29979  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 9')
+[ 0.02514100 ] [INFO] RECV: (FLAGS=ACK  SEQ=43658  ACK=29980  WIN=16  PAYLOAD='')
+[ 0.02584600 ] [INFO] SEND: (FLAGS=FIN  SEQ=-1  ACK=0  WIN=0  PAYLOAD='')
+[ 0.02654004 ] [INFO] RECV: (FLAGS=ACK|FIN  SEQ=-1  ACK=0  WIN=0  PAYLOAD='')</pre>
+        </div>
+      </div>
+
+      <hr>
+
+      <div class="row-fluid">
+        <div class="span12">
+          <h4>Servidor</h4>
+          <pre class="prettyprint linenums lang-python">Listening for new connection on   : 50007 ...
+[ 0.84457588 ] [INFO] RECV: (FLAGS=SYN  SEQ=29969  ACK=0  WIN=16  PAYLOAD='')
+[ 0.84495497 ] [INFO] SEND: (FLAGS=ACK|SYN  SEQ=43657  ACK=29970  WIN=16  PAYLOAD='')
+[ 0.84573007 ] [INFO] RECV: (FLAGS=ACK  SEQ=29970  ACK=43658  WIN=16  PAYLOAD='')
+Connection estabilished ( ('127.0.0.1', 40908) ).
+[ 0.84642196 ] [INFO] RECV (OUT OF ORDER): (FLAGS=ACK|DATA  SEQ=29971  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 1')
+[ 0.84649706 ] [INFO] SEND: (FLAGS=NACK  SEQ=43658  ACK=29970  WIN=16  PAYLOAD='')
+[ 0.84729004 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=29970  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 0')
+[ 0.84819889 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=29971  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 1')
+[ 0.84895897 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=29972  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 2')
+[ 0.84984589 ] [INFO] RECV (OUT OF ORDER): (FLAGS=ACK|DATA  SEQ=29974  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 4')
+[ 0.85010004 ] [INFO] SEND: (FLAGS=NACK  SEQ=43658  ACK=29973  WIN=16  PAYLOAD='')
+[ 0.85083008 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=29973  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 3')
+[ 0.85186291 ] [INFO] RECV (OUT OF ORDER): (FLAGS=ACK|DATA  SEQ=29975  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 5')
+[ 0.85218287 ] [INFO] SEND: (FLAGS=NACK  SEQ=43658  ACK=29974  WIN=16  PAYLOAD='')
+[ 0.85319400 ] [INFO] RECV (OUT OF ORDER): (FLAGS=ACK|DATA  SEQ=29976  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 6')
+[ 0.85348296 ] [INFO] SEND: (FLAGS=NACK  SEQ=43658  ACK=29974  WIN=16  PAYLOAD='')
+[ 0.85438490 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=29974  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 4')
+[ 0.85531402 ] [INFO] RECV (DUPLICATED): (FLAGS=ACK|DATA  SEQ=29973  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 3')
+[ 0.85605407 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=29975  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 5')
+[ 0.85680294 ] [INFO] RECV (DUPLICATED): (FLAGS=ACK|DATA  SEQ=29974  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 4')
+[ 0.85745096 ] [INFO] RECV (DUPLICATED): (FLAGS=ACK|DATA  SEQ=29974  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 4')
+[ 0.85819602 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=29976  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 6')
+[ 0.85873103 ] [INFO] RECV (DUPLICATED): (FLAGS=ACK|DATA  SEQ=29974  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 4')
+[ 0.85977507 ] [INFO] RECV (DUPLICATED): (FLAGS=ACK|DATA  SEQ=29975  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 5')
+[ 0.86073399 ] [INFO] RECV (DUPLICATED): (FLAGS=ACK|DATA  SEQ=29976  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 6')
+[ 0.86163092 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=29977  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 7')
+[ 0.86262894 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=29978  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 8')
+[ 0.86338997 ] [INFO] RECV: (FLAGS=ACK|DATA  SEQ=29979  ACK=43658  WIN=16  PAYLOAD='this is the datagram number 9')
+[ 0.86643887 ] [INFO] SEND: (FLAGS=ACK  SEQ=43658  ACK=29980  WIN=16  PAYLOAD='')
+[ 0.86790204 ] [INFO] RECV: (FLAGS=FIN  SEQ=-1  ACK=0  WIN=0  PAYLOAD='')
+Listening for new connection on   : 50007 ...</pre>
+        </div>
+      </div>
+
+      <hr>
+
+    </div>
+
+    <script src="../js/jquery.min.js"></script>
+    <script src="../js/bootstrap.min.js"></script>
+    <script src="https://google-code-prettify.googlecode.com/svn/loader/run_prettify.js?skin=desert"></script>
+  </body>
+</html>
