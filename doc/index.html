@@ -1,0 +1,159 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>Trabalho Prático de Redes de Computadores II</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+      content="Implementação de uma aplicação confiável sobre UDP">
+    <meta name="author" content="Daniel Gomes, Eduardo Buratti">
+
+    <link href="css/bootstrap.min.css" rel="stylesheet">
+    <link href="css/bootstrap-responsive.min.css" rel="stylesheet">
+    <link href="css/highlight-js/monokai.css" rel="stylesheet">
+    <link href="css/main.css" rel="stylesheet">
+  </head>
+
+  <body>
+
+    <div class="container">
+
+      <div class="masthead">
+        <h2 class="muted">Trabalho Prático de Redes de Computadores II</h2>
+        <h6 class="muted">
+          <strong>Autores:</strong> Daniel Gomes
+          (<a href="mailto:dgpg09@c3sl.ufpr.br">dgpg09@c3sl.ufpr.br</a>)
+          e Eduardo Buratti
+          (<a href="mailto:elb09@c3sl.ufpr.br">elb09@c3sl.ufpr.br</a>)
+        </h6>
+        <div class="navbar">
+          <div class="navbar-inner">
+            <div class="container">
+              <ul class="nav">
+                <li class="active"><a href="#">Relatório</a></li>
+                <li><a href="source.html">Código Fonte</a></li>
+                <li><a href="logs.html">Logs</a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row-fluid">
+        <div class="span7">
+          <h2>1. O Protocolo</h2>
+          <p>
+            Desenvolvemos um protocolo (funcionando na camada de aplicação) que
+            aqui chamaremos de <em>Reliable Datagram Protocol</em> ou,
+            abreviadamente, <abbr title="Reliable Datagram Protocol">RDP</abbr>.
+          </p>
+          <p>
+            O protocolo consiste em duas interfaces (figura à direita):
+            <ol>
+              <li>interface entre a real aplicação que utiliza o RDP e o próprio RDP;</li>
+              <li>interface entre o RDP e o socket UDP.</li>
+            </ol>
+            Assim, o protocolo RDP pode utilizar o protocolo UDP para fornecer
+            transmissão de datagramas de forma confiável.
+          </p>
+          <p> A interface 1 fornece as seguintes funções para a camada de aplicação:
+          <ul>
+            <li>bind(address)</li>
+            <li>listen()</li>
+            <li>connect(remote_address)</li>
+            <li>send(data)</li>
+            <li>recv(buffer_size)</li>
+            <li>close()</li>
+          </ul>
+          Estas funções tem funcionamento análogo as funções de mesmo nome do socket UDP.
+          </p>
+        </div>
+        <div class="span5">
+          <img src="img/rdp-interfaces.png" class="img-polaroid">
+        </div>
+      </div>
+
+      <div class="row-fluid">
+        <div class="span12">
+          <h4>1.1 Operação do protocolo</h4>
+          <p>Três fases acontecem na vida de uma conexão através do RDP. Estas são:
+            conexão, transmissão, encerramento.</p>
+            <p>A <strong>conexão</strong> é estabelecida utilizando
+            <em>three-way handshake</em> semelhante ao TCP, porém com as seguintes diferenças:</p>
+            <ol>
+              <li>Quando o servidor recebe o SYN do cliente, um novo socket é criado e é feito o bind deste
+                para uma porta aleatória. Através deste socket o servidor envia um SYN,ACK para o cliente.</li>
+              <li>O cliente, ao receber o SYN,ACK deste novo endereço (novo
+                socket no servidor) passa a utilizá-lo como endereço do
+                servidor e envia para este um ACK.</li>
+            </ol>
+            Desta maneira o servidor pode tratar a conexão em um novo processo ou
+            thread e continuar a escutar por novas conexões.
+          </p>
+          <p>
+            O <strong>encerramento</strong> é feito por um datagrama de sequência '-1' (FIN).
+            O host que receber este datagrama envia todos os datagramas
+            pendentes e por fim também envia um datagrama de sequência -1
+            (FIN,ACK). O host que enviou só encerra a conexão ao receber esta resposta.
+          </p>
+          <p>
+            Durante a <strong>transmissão</strong>, os números de sequência
+            garantem que pacotes faltantes, fora de ordem ou duplicados sejam
+            identificados.
+            Para cada datagrama recebido, compare-se se o número de sequência
+            com o número de sequência esperado e:
+
+            <ol>
+              <li>se o esperado for maior do que o recebido, então o datagrama é duplicado e simplesmente descartado.</li>
+              <li>se o esperado for menor do que o recebido, então o datagrama esta fora de ordem ou um datagrama foi perdido. Aí um datagrama NACK é enviado à origem para notificação.</li>
+              <li>se o esperado for igual ao recebido, o datagrama está correto e é adicionado ao buffer de recebimento (RCV_BUFFER).</li>
+            </ol>
+          </p>
+          <p>Note que o número de sequência esperado e baseado no número de sequência do último datagrama recebido (iniciando com o SYN e SYN,ACK).
+          <p>
+            Ao receber um NACK, todos os datagramas não confirmados (por um ACK) passam a ser reentransmitidos.
+            Ao receber um ACK, todos os datagramas que estão no buffer (SND_BUFFER) e têm número de sequência menor do que o número do ACK são removidos do buffer.
+            Todo datagrama de dados envia um ACK <em>piggybacked</em>.
+          </p>
+          <h4>1.2 Controle de fluxo</h4>
+          <p>
+            Assim como no TCP, utilizamos janelas deslizantes para controle de fluxo. O funcionamente é bastante semelhante, e por isso decidimos não descrever em detalhes.
+          </p>
+        </div>
+      </div>
+
+      <div class="row-fluid">
+        <div class="span12">
+          <h2>2. Cliente, servidor e os testes</h2>
+          <p>
+            Como a interface que o RDP fornece é praticamente igual ao socket UDP,
+            tanto o servidor quanto o cliente tem implementações como se fossem
+            programados diretamente sobre UDP.
+          </p>
+          <p>
+            Ambos, servidor e cliente, podem ser executados com os seguintes
+            parâmetros:
+            <ul>
+              <li><em>--ploss</em>: define o percentual (de 0 à 1) de datagramas perdidos;</li>
+              <li><em>--pdup</em>: define o percentual (de 0 à 1) de datagramas duplicados;</li>
+              <li><em>--pdelay</em>: define o percentual (de 0 à 1) de datagramas atrasados (causa datagramas fora de ordem).</li>
+            </ul>
+            Assim é possível simular situações de interferências na rede durante a transmissão.
+          </p>
+          <p>
+            Os testes foram executados com diversos parâmetros de entrada e seus resultados podem ser vistos em <a href="logs.html">logs</a>.
+          </p>
+        </div>
+      </div>
+
+      <hr>
+
+    </div>
+
+    <script src="js/jquery.min.js"></script>
+    <script src="js/bootstrap.min.js"></script>
+    <script src="js/highlight.pack.js"></script>
+    <script>hljs.initHighlightingOnLoad();</script>
+  </body>
+</html>
