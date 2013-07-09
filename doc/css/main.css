@@ -41,8 +41,8 @@ body {
   border-radius: 0 3px 3px 0;
 }
 
-table tr.active {
-  background-color: red
+table.table-hover tr {
+  cursor: pointer;
 }
 
 li.L0, li.L1, li.L2, li.L3,
