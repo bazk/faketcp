@@ -42,6 +42,10 @@
             <td>server.py</td>
             <td style="width: 172px;"><strong><a href="src/server.py.txt"><i class="icon-file"></i> Download RAW</a></strong></td>
           </tr>
+          <tr href="#concurrent_server">
+            <td>concurrent_server.py</td>
+            <td style="width: 172px;"><strong><a href="src/concurrent_server.py.txt"><i class="icon-file"></i> Download RAW</a></strong></td>
+          </tr>
           <tr href="#client">
             <td>client.py</td>
             <td style="width: 172px;"><strong><a href="src/client.py.txt"><i class="icon-file"></i> Download RAW</a></strong></td>
@@ -58,7 +62,25 @@
 
         <div class="tab-content">
           <div class="tab-pane" id="server">
-            <pre class="prettyprint lang-python">import argparse
+            <pre class="prettyprint lang-python">#!/usr/bin/env python2
+# -*- coding: utf-8 -*-
+#
+# This file is part of faketcp.
+#
+# faketcp is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# trooper-simulator is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with faketcp. If not, see <http://www.gnu.org/licenses/>.
+
+import argparse
 import rdp
 import logging.config
 import config
@@ -98,8 +120,96 @@ if __name__=="__main__":
     # close the listening socket
     socket.close()</pre>
           </div>
+          <div class="tab-pane" id="concurrent_server">
+            <pre class="prettyprint lang-python">#!/usr/bin/env python2
+# -*- coding: utf-8 -*-
+#
+# This file is part of faketcp.
+#
+# faketcp is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# trooper-simulator is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with faketcp. If not, see <http://www.gnu.org/licenses/>.
+
+import os
+import sys
+import argparse
+import rdp
+import logging.config
+import config
+
+logging.config.dictConfig(config.LOGGING)
+
+if __name__=="__main__":
+    # parse command line arguments
+    parser = argparse.ArgumentParser(description='FakeTCP server')
+    parser.add_argument('host', metavar='HOST', type=str, default='', nargs='?', help='bind address')
+    parser.add_argument('port', metavar='PORT', type=int, default=50007, nargs='?', help='bind port')
+    parser.add_argument('--ploss', metavar='PLOSS', type=float, default=0.0, help='probability of datagram loss between 0.0 and 1.0, defaults to 0.0.')
+    parser.add_argument('--pdup', metavar='PDUP', type=float, default=0.0, help='probability of datagram duplication between 0.0 and 1.0, defaults to 0.0.')
+    parser.add_argument('--pdelay', metavar='PDELAY', type=float, default=0.0, help='probability of datagram delayed (and arriving out of order) between 0.0 and 1.0, defaults to 0.0.')
+    args = parser.parse_args()
+
+    # create the RDP socket
+    socket = rdp.Socket(ploss=args.ploss, pdup=args.pdup, pdelay=args.pdelay)
+    socket.bind((args.host, args.port))
+    socket.listen()
+
+    # loop forever waiting incoming connections
+    while True:
+        print 'Listening for new connection on ', args.host, ':', args.port, '...'
+        conn, addr = socket.accept()
+
+        pid = os.fork()
+
+        if (pid < 0):
+            raise Exception('Failed to fork process.')
+
+        elif (pid == 0):
+            print 'Connection estabilished (', addr, ').'
+
+            # loop forever waiting datagrams
+            while True:
+                try:
+                    conn.recv(1024)
+                except rdp.NotConnected:
+                    # break when connection closed
+                    break
+
+            print 'Connection closed (', addr, ').'
+            sys.exit(0)
+
+    # close the listening socket
+    socket.close()</pre>
+          </div>
           <div class="tab-pane" id="client">
-            <pre class="prettyprint lang-python">import argparse
+            <pre class="prettyprint lang-python">#!/usr/bin/env python2
+# -*- coding: utf-8 -*-
+#
+# This file is part of faketcp.
+#
+# faketcp is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# trooper-simulator is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with faketcp. If not, see <http://www.gnu.org/licenses/>.
+
+import argparse
 import rdp
 import logging.config
 import config
@@ -133,7 +243,24 @@ if __name__=="__main__":
     socket.close()</pre>
           </div>
           <div class="tab-pane" id="rdp">
-            <pre class="prettyprint lang-python">import socket
+            <pre class="prettyprint lang-python"># -*- coding: utf-8 -*-
+#
+# This file is part of faketcp.
+#
+# faketcp is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# trooper-simulator is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with faketcp. If not, see <http://www.gnu.org/licenses/>.
+
+import socket
 import struct
 import random
 import threading
@@ -197,7 +324,8 @@ class Socket(object):
         self.SND_RDY = 0
         self.SND_WND = 0
         self.SND_TIMEOUT = 0.4
-        self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
+        self.SND_TIMER = None
+        self.SND_TIMER_RUNNING = False
         self.ISS = random.randint(0, 65535) # initial send sequence number
 
         self.RCV_NXT = 0
@@ -207,7 +335,8 @@ class Socket(object):
 
         self.ACK_PENDING = False
         self.ACK_TIMEOUT = 0.02
-        self.ACK_TIMER = threading.Timer(self.ACK_TIMEOUT, self.ack_timeout)
+        self.ACK_TIMER = None
+        self.ACK_TIMER_RUNNING = False
 
         self.PLOSS = ploss
         self.PDUP = pdup
@@ -302,9 +431,6 @@ class Socket(object):
         # set the socket state as ESTABLISHED
         self.STATE = State.ESTABLISHED
 
-        # start ACK timer (to send ACKS each 'ACK_TIMEOUT' interval)
-        self.ACK_TIMER.start()
-
     def listen(self):
         """ Put the socket in LISTEN state. """
 
@@ -384,9 +510,6 @@ class Socket(object):
 
         # set the socket state as ESTABLISHED
         conn.STATE = State.ESTABLISHED
-
-        # start ACK timer
-        conn.ACK_TIMER.start()
 
         # return the new socket
         return (conn, conn.REMOTE_ADDR)
@@ -523,6 +646,12 @@ class Socket(object):
                         self.RCV_NXT += 1
                         self.ACK_PENDING = True
 
+                        # start ACK_TIMER because whe have ACKs to send
+                        if not self.ACK_TIMER_RUNNING:
+                            self.ACK_TIMER = threading.Timer(self.ACK_TIMEOUT, self.ack_timeout)
+                            self.ACK_TIMER.start()
+                            self.ACK_TIMER_RUNNING = True
+
                 # if datagram has no data, just log it
                 else:
                     __log__.info('RECV: ' + str(datagram))
@@ -539,9 +668,10 @@ class Socket(object):
                     self.SND_WND = datagram.WIN
 
                     # reset retransmission timer
-                    self.SND_TIMER.cancel()
-                    self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
-                    self.SND_TIMER.start()
+                    if self.SND_TIMER_RUNNING:
+                        self.SND_TIMER.cancel()
+                        self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
+                        self.SND_TIMER.start()
 
                 if (datagram.FLAGS & Flags.FLAG_NACK) != 0:
                     # NOTE: when a NACK is received, the ACK information is
@@ -557,9 +687,10 @@ class Socket(object):
                     self.SND_WND = datagram.WIN
 
                     # reset retransmission timer
-                    self.SND_TIMER.cancel()
-                    self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
-                    self.SND_TIMER.start()
+                    if self.SND_TIMER_RUNNING:
+                        self.SND_TIMER.cancel()
+                        self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
+                        self.SND_TIMER.start()
 
                     if self.SND_NXT > self.SND_UNA:
                         __log__.info('RETRANSMISSION STARTED (triggered by NACK)')
@@ -609,10 +740,16 @@ class Socket(object):
             self.SND_NXT += 1
             self.SND_WND -= 1
 
+            if not self.SND_TIMER_RUNNING:
+                self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
+                self.SND_TIMER.start()
+                self.SND_TIMER_RUNNING = True
+
             # reset ACK timer (since ACK is piggybacked in every DATA datagram)
-            self.ACK_TIMER.cancel()
-            self.ACK_TIMER = threading.Timer(self.ACK_TIMEOUT, self.ack_timeout)
-            self.ACK_TIMER.start()
+            if self.ACK_TIMER_RUNNING:
+                self.ACK_TIMER.cancel()
+                self.ACK_TIMER = threading.Timer(self.ACK_TIMEOUT, self.ack_timeout)
+                self.ACK_TIMER.start()
 
         self.lock.release()
 
@@ -704,8 +841,12 @@ class Socket(object):
                     self.lock.acquire()
 
                 # stop timers
-                self.SND_TIMER.cancel()
-                self.ACK_TIMER.cancel()
+                if self.SND_TIMER_RUNNING:
+                    self.SND_TIMER_RUNNING = False
+                    self.SND_TIMER.cancel()
+                if self.ACK_TIMER_RUNNING:
+                    self.ACK_TIMER_RUNNING = False
+                    self.ACK_TIMER.cancel()
 
                 # send pending ack
                 if self.ACK_PENDING:
@@ -728,8 +869,12 @@ class Socket(object):
                         break
 
             # stop timers (if not stopped already)
-            self.SND_TIMER.cancel()
-            self.ACK_TIMER.cancel()
+            if self.SND_TIMER_RUNNING:
+                self.SND_TIMER_RUNNING = False
+                self.SND_TIMER.cancel()
+            if self.ACK_TIMER_RUNNING:
+                self.ACK_TIMER_RUNNING = False
+                self.ACK_TIMER.cancel()
 
         # close the socket
         self.STATE = State.CLOSED
@@ -810,7 +955,7 @@ LOGGING = {
         },
         'test': {
             '()': 'config.MyFormatter',
-            'format': '[ %(asctime)s ] [%(levelname)s] %(message)s'
+            'format': '[ %(asctime)s ] [ %(process)d ] [%(levelname)s] %(message)s'
         },
         'simple': {
             'format': '%(levelname)s %(message)s'

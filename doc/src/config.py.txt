@@ -10,7 +10,7 @@ LOGGING = {
         },
         'test': {
             '()': 'config.MyFormatter',
-            'format': '[ %(asctime)s ] [%(levelname)s] %(message)s'
+            'format': '[ %(asctime)s ] [ %(process)d ] [%(levelname)s] %(message)s'
         },
         'simple': {
             'format': '%(levelname)s %(message)s'
