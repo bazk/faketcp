@@ -78,7 +78,7 @@ class Socket(object):
         self.SND_UNA = 0
         self.SND_RDY = 0
         self.SND_WND = 0
-        self.SND_TIMEOUT = 0.2
+        self.SND_TIMEOUT = 0.4
         self.SND_TIMER = threading.Timer(self.SND_TIMEOUT, self.send_timeout)
         self.ISS = random.randint(0, 65535) # initial send sequence number
 
@@ -88,7 +88,6 @@ class Socket(object):
         self.IRS = 0     # initial receive sequence number
 
         self.ACK_PENDING = False
-        self.NACK_PENDING = False
         self.ACK_TIMEOUT = 0.02
         self.ACK_TIMER = threading.Timer(self.ACK_TIMEOUT, self.ack_timeout)
 
@@ -395,7 +394,7 @@ class Socket(object):
                         __log__.info('RECV (OUT OF ORDER): ' + str(datagram))
 
                         # send NACK when ACK_TIMEOUT
-                        self.NACK_PENDING = True
+                        self.send_nack()
 
                     else:
                         __log__.info('RECV: ' + str(datagram))
@@ -458,15 +457,11 @@ class Socket(object):
             send_datagram.ACK = self.IRS + self.RCV_UNA
             send_datagram.WIN = self.RCV_WND
 
-            # send delayed datagram if set in the last sync call
-            if self.DELAYED_SEND is not None:
-                __log__.info('SEND (DELAYED): ' + str(self.DELAYED_SEND))
-                self._socket.sendto(self.DELAYED_SEND.to_data(),
-                    self.REMOTE_ADDR)
-                self.DELAYED_SEND = None
+            something_actually_sent = False
 
-            if random.uniform(0,1) < self.PDELAY:
+            if self.DELAYED_SEND is None and random.uniform(0,1) < self.PDELAY:
                 # set datagram as delayed (will be sent in the next sync call)
+                __log__.info('SEND (DELAYED): ' + str(send_datagram))
                 self.DELAYED_SEND = send_datagram
 
             elif random.uniform(0,1) < self.PDUP:
@@ -474,6 +469,7 @@ class Socket(object):
                 __log__.info('SEND (DUP): ' + str(send_datagram))
                 self._socket.sendto(send_datagram.to_data(), self.REMOTE_ADDR)
                 self._socket.sendto(send_datagram.to_data(), self.REMOTE_ADDR)
+                something_actually_sent = True
 
             elif random.uniform(0,1) < self.PLOSS:
                 # do not send the datagram
@@ -483,6 +479,13 @@ class Socket(object):
                 # just send the datagram normally
                 __log__.info('SEND: ' + str(send_datagram))
                 self._socket.sendto(send_datagram.to_data(), self.REMOTE_ADDR)
+                something_actually_sent = True
+
+            # send delayed datagram if set in the last sync call
+            if something_actually_sent and self.DELAYED_SEND is not None:
+                self._socket.sendto(self.DELAYED_SEND.to_data(),
+                    self.REMOTE_ADDR)
+                self.DELAYED_SEND = None
 
             # update pointers and window
             self.SND_NXT += 1
@@ -528,7 +531,7 @@ class Socket(object):
         # if unacknowledged data exists in SND_BUFFER
         if self.SND_NXT > self.SND_UNA:
             self.SND_NXT = self.SND_UNA
-            __log__.info('RETRANSMISSION STARTED '+str(self))
+            __log__.info('RETRANSMISSION STARTED (triggered by SND_TIMEOUT)')
 
         # restart timer
         self.SND_TIMER.cancel()
@@ -545,12 +548,8 @@ class Socket(object):
 
         self.lock.acquire()
 
-        # if NACK or ACK pending, send them
-        if self.NACK_PENDING:
-            self.send_nack()
-            self.NACK_PENDING = False
-            self.ACK_PENDING = False
-        elif self.ACK_PENDING:
+        # if ACK pending, send it
+        if self.ACK_PENDING:
             self.send_ack()
             self.ACK_PENDING = False
 
