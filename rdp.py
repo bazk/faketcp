@@ -625,8 +625,8 @@ class ReliableDatagram(object):
     def __init__(self):
         self.SEQ = 0
         self.ACK = 0
-        self.FLAGS = 0x0000
         self.WIN = 0
+        self.FLAGS = 0x0000
         self.CHECKSUM = 0
         self.PAYLOAD = ''
 
@@ -649,19 +649,19 @@ class ReliableDatagram(object):
 
         dgram = ReliableDatagram()
 
-        dgram.SEQ, dgram.ACK, dgram.FLAGS, dgram.WIN, \
-                dgram.CHECKSUM = struct.unpack('!iiHHH', data[0:14])
-        dgram.PAYLOAD = data[14:]
+        dgram.SEQ, dgram.ACK, dgram.WIN, dgram.FLAGS, \
+                dgram.CHECKSUM = struct.unpack('!iiiHH', data[0:16])
+        dgram.PAYLOAD = data[16:]
 
-        if dgram.calculate_checksum(data[0:14]) != 0:
-            raise ChecksumError('dgram header: 0x' + data[0:14].encode('hex'))
+        if dgram.calculate_checksum(data[0:16]) != 0:
+            raise ChecksumError('dgram header: 0x' + data[0:16].encode('hex'))
 
         return dgram
 
     def to_data(self):
         """ Transforms a ReliableDatagram in raw data. """
 
-        header = struct.pack('!iiHH', self.SEQ, self.ACK, self.FLAGS, self.WIN)
+        header = struct.pack('!iiiH', self.SEQ, self.ACK, self.WIN, self.FLAGS)
         self.CHECKSUM = struct.pack('!H', self.calculate_checksum(header))
         return header + self.CHECKSUM + self.PAYLOAD
 
